@@ -1,0 +1,71 @@
+version: '3.8'
+
+services:
+  # ===== POSTGRESQL ДЕРЕКҚОР =====
+  postgres:
+    image: postgres:15-alpine
+    container_name: securechat-db
+    restart: always
+    environment:
+      POSTGRES_DB: securechat
+      POSTGRES_USER: securechat_user
+      POSTGRES_PASSWORD: SecureChat2026!
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - securechat-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U securechat_user -d securechat"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ===== SPRING BOOT BACKEND =====
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: securechat-backend
+    restart: always
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/securechat
+      SPRING_DATASOURCE_USERNAME: securechat_user
+      SPRING_DATASOURCE_PASSWORD: SecureChat2026!
+      JWT_SECRET: SecureChatJwtSecret2026VeryLongSecretKeyForProduction!
+      JWT_EXPIRATION: 604800000
+      APP_UPLOAD_DIR: /app/uploads/
+      SERVER_PORT: 8080
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - securechat-net
+    volumes:
+      - uploads_data:/app/uploads
+
+  # ===== REACT FRONTEND =====
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: securechat-frontend
+    restart: always
+    ports:
+      - "80:80"
+      - "3000:80"
+    depends_on:
+      - backend
+    networks:
+      - securechat-net
+
+volumes:
+  postgres_data:
+  uploads_data:
+
+networks:
+  securechat-net:
+    driver: bridge

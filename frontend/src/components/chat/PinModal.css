@@ -1,0 +1,25 @@
+.pin-modal {
+  background: var(--bg-secondary); border: 1px solid var(--border);
+  border-radius: var(--r-md); padding: 36px 32px; max-width: 360px; width: 100%;
+  text-align: center; position: relative; box-shadow: var(--shadow);
+}
+.pin-close { position: absolute; top: 12px; right: 12px; }
+.pin-icon { font-size: 52px; margin-bottom: 12px; }
+.pin-modal h3 { font-size: 18px; font-weight: 700; margin-bottom: 8px; }
+.pin-modal p { font-size: 13px; color: var(--text-secondary); margin-bottom: 28px; line-height: 1.5; }
+.pin-inputs { display: flex; gap: 8px; justify-content: center; margin-bottom: 20px; }
+.pin-box {
+  width: 44px; height: 52px;
+  background: var(--bg-input); border: 2px solid var(--border);
+  border-radius: var(--r-sm); text-align: center;
+  font-size: 22px; font-weight: 700; color: var(--text-primary);
+  outline: none; transition: all var(--t);
+  -webkit-text-security: disc;
+}
+.pin-box:focus { border-color: var(--accent); background: var(--accent-dim); }
+.pin-box.filled { border-color: var(--accent); }
+.pin-error {
+  background: var(--danger-dim); border: 1px solid var(--danger);
+  border-radius: var(--r-sm); padding: 8px 12px;
+  color: var(--danger); font-size: 12px; margin-bottom: 16px;
+}

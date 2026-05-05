@@ -1,0 +1,52 @@
+.auth-page {
+  min-height: 100vh; display: flex; align-items: center;
+  justify-content: center; background: var(--bg-primary); padding: 20px;
+}
+.auth-card {
+  width: 100%; max-width: 420px;
+  background: var(--bg-secondary); border: 1px solid var(--border);
+  border-radius: var(--r-md); padding: 40px; box-shadow: var(--shadow);
+}
+.auth-card-wide { max-width: 500px; }
+.auth-logo { text-align: center; margin-bottom: 32px; }
+.auth-logo-icon { font-size: 52px; margin-bottom: 8px; }
+.auth-logo h1 { font-size: 26px; font-weight: 800; color: var(--accent); margin-bottom: 4px; }
+.auth-logo p { color: var(--text-secondary); font-size: 14px; }
+.auth-title { font-size: 18px; font-weight: 700; margin-bottom: 24px; }
+.auth-error {
+  background: var(--danger-dim); border: 1px solid var(--danger);
+  border-radius: var(--r-sm); padding: 10px 14px;
+  color: var(--danger); font-size: 13px; margin-bottom: 16px;
+}
+.auth-footer { text-align: center; margin-top: 24px; color: var(--text-secondary); font-size: 14px; }
+.auth-footer a { color: var(--accent); text-decoration: none; font-weight: 600; }
+.auth-footer a:hover { text-decoration: underline; }
+
+/* Steps */
+.auth-steps { display: flex; align-items: center; margin-bottom: 28px; }
+.auth-step { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-muted); font-weight: 500; }
+.auth-step span { width: 24px; height: 24px; border-radius: 50%; background: var(--bg-hover); display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; }
+.auth-step.active { color: var(--text-primary); }
+.auth-step.active span { background: var(--accent); color: #fff; }
+.auth-step-line { flex: 1; height: 2px; background: var(--border); margin: 0 10px; }
+
+/* Input with @ prefix */
+.input-prefix-wrap { display: flex; background: var(--bg-input); border: 1px solid var(--border); border-radius: var(--r-sm); overflow: hidden; }
+.input-prefix-wrap:focus-within { border-color: var(--accent); }
+.input-prefix-icon { padding: 10px 12px; color: var(--text-muted); font-size: 14px; background: var(--bg-hover); border-right: 1px solid var(--border); }
+.input-prefix-wrap .input { border: none; border-radius: 0; background: transparent; }
+.input-prefix-wrap .input:focus { border: none; }
+
+/* Password eye */
+.input-eye { position: relative; }
+.input-eye .input { padding-right: 40px; }
+.eye-btn { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; font-size: 16px; color: var(--text-muted); }
+
+/* Toggle tabs */
+.toggle-tabs { display: flex; gap: 8px; margin-bottom: 10px; }
+.toggle-tab {
+  flex: 1; padding: 8px; background: var(--bg-tertiary); border: 1px solid var(--border);
+  border-radius: var(--r-sm); color: var(--text-secondary); cursor: pointer; font-size: 13px; font-weight: 500;
+  transition: all var(--t); font-family: inherit;
+}
+.toggle-tab.active { background: var(--accent-dim); border-color: var(--accent); color: var(--accent); }
