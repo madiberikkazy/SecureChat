@@ -43,9 +43,18 @@ public class ChatService {
         return buildChatDto(chat, user);
     }
 
-    // ===== ЧАТТЫҢ ХАБАРЛАМАЛАРЫН АЛУ =====
+    // ===== ЧАТТЫҢ ХАБАРЛАМАЛАРЫН АЛУ (PIN ТЕКСЕРІСІМЕН) =====
     public List<MessageDto> getMessages(Long chatId, User user) {
         assertMember(chatId, user.getId());
+        
+        Chat chat = chatRepo.findById(chatId)
+                .orElseThrow(() -> new RuntimeException("Чат табылмады"));
+
+        // Чат жасырын болса — PIN енгізілгенін тексеру
+        if (isHidden(chatId, user.getId())) {
+            throw new RuntimeException("Бұл чат жасырын. Алдымен PIN-кодты енгізіңіз.");
+        }
+
         return messageRepo.findByChatIdOrderByCreatedAtAsc(chatId)
                 .stream()
                 .map(mapper::toMessageDto)
@@ -165,6 +174,10 @@ public class ChatService {
         Chat chat = chatRepo.findById(chatId)
                 .orElseThrow(() -> new RuntimeException("Чат табылмады"));
 
+        if (pin == null || pin.length() < 4) {
+            throw new RuntimeException("PIN-код кемінде 4 цифр болуы керек");
+        }
+
         Optional<HiddenChat> existing = hiddenRepo.findByChatIdAndUserId(chatId, user.getId());
         if (existing.isPresent()) {
             existing.get().setPinHash(encoder.encode(pin));
@@ -179,6 +192,10 @@ public class ChatService {
 
     // ===== PIN ТЕКСЕРУ =====
     public boolean verifyPin(Long chatId, String pin, User user) {
+        if (!isHidden(chatId, user.getId())) {
+            throw new RuntimeException("Бұл чат жасырын емес");
+        }
+
         return hiddenRepo.findByChatIdAndUserId(chatId, user.getId())
                 .map(h -> encoder.matches(pin, h.getPinHash()))
                 .orElseThrow(() -> new RuntimeException("Жасырын чат табылмады"));
@@ -187,6 +204,7 @@ public class ChatService {
     // ===== ЖАСЫРЫН РЕЖИМДІ АЛЫП ТАСТАУ =====
     @Transactional
     public void removePin(Long chatId, User user) {
+        assertMember(chatId, user.getId());
         hiddenRepo.deleteByChatIdAndUserId(chatId, user.getId());
     }
 
@@ -204,6 +222,11 @@ public class ChatService {
         });
     }
 
+    // ===== ЧАТТЫҢ ЖАСЫРЫН ЕКЕНІН ТЕКСЕРУ =====
+    private boolean isHidden(Long chatId, Long userId) {
+        return hiddenRepo.existsByChatIdAndUserId(chatId, userId);
+    }
+
     // ===== ChatDto ЖАСАУ =====
     private ChatDto buildChatDto(Chat chat, User currentUser) {
         List<ChatMember> members = memberRepo.findByChatIdAndActiveTrue(chat.getId());
@@ -219,7 +242,7 @@ public class ChatService {
                 .orElse(currentUser.getCreatedAt());
         long unread = messageRepo.countUnread(chat.getId(), currentUser.getId(), lastRead);
 
-        boolean hidden = hiddenRepo.existsByChatIdAndUserId(chat.getId(), currentUser.getId());
+        boolean hidden = isHidden(chat.getId(), currentUser.getId());
 
         return ChatDto.builder()
                 .id(chat.getId())

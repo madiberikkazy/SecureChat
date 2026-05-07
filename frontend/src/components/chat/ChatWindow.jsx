@@ -7,6 +7,9 @@ import { useChatWebSocket } from '../../hooks/useWebSocket'
 import { useToast } from '../common/Toast'
 import Avatar from '../common/Avatar'
 import PinModal from './PinModal'
+import MediaViewer from './MediaViewer'
+import AudioRecorder from './AudioRecorder'
+import FileUploadInput from '../common/FileUploadInput'
 import { getChatName, getChatOtherUser, formatMessageTime, formatLastSeen, getInitials } from '../../utils/helpers'
 import './ChatWindow.css'
 
@@ -25,6 +28,10 @@ export default function ChatWindow() {
   const [showPin, setShowPin] = useState(false)
   const [showInfo, setShowInfo] = useState(false)
   const [replyTo, setReplyTo] = useState(null)
+  const [showAudioRecorder, setShowAudioRecorder] = useState(false)
+  const [imageFile, setImageFile] = useState(null)
+  const [imageCaption, setImageCaption] = useState('')
+  const [uploadingMedia, setUploadingMedia] = useState(false)
 
   const bottomRef = useRef(null)
   const inputRef = useRef(null)
@@ -44,7 +51,15 @@ export default function ChatWindow() {
         setMessages(selectedChatId, res.data)
         clearUnread(selectedChatId)
       })
-      .catch(() => toast.error('Хабарламаларды жүктеу мүмкін болмады'))
+      .catch((err) => {
+        // PIN қажет болса
+        if (err.response?.status === 403 || err.response?.data?.error?.includes('жасырын')) {
+          setShowPin(true)
+          toast.info('PIN-кодты енгізіңіз')
+        } else {
+          toast.error('Хабарламаларды жүктеу мүмкін болмады')
+        }
+      })
       .finally(() => setLoading(false))
 
     inputRef.current?.focus()
@@ -63,6 +78,7 @@ export default function ChatWindow() {
     typingTimer.current = setTimeout(() => wsService.sendTyping(selectedChatId, false), 2000)
   }
 
+  // ===== МӘТІН ХАБАРЛАМАСЫ ЖІБЕРУ =====
   const handleSend = useCallback(async () => {
     const content = input.trim()
     if (!content || sending) return
@@ -72,10 +88,8 @@ export default function ChatWindow() {
 
     setSending(true)
     try {
-      // WebSocket арқылы жіберуге тырысу
       const sent = wsService.sendMessage(selectedChatId, content, replyTo?.id)
       if (!sent) {
-        // Fallback: REST
         const res = await messageAPI.send({ chatId: selectedChatId, content, replyToId: replyTo?.id })
         addMessage(selectedChatId, res.data)
       }
@@ -84,6 +98,72 @@ export default function ChatWindow() {
       setInput(content)
     } finally { setSending(false) }
   }, [input, selectedChatId, replyTo, sending])
+
+  // ===== СУРЕТ ЖІБЕРУ =====
+  const handleSendImage = useCallback(async (file) => {
+    if (!file) return
+    
+    setUploadingMedia(true)
+    try {
+      const formData = new FormData()
+      formData.append('chatId', selectedChatId)
+      formData.append('file', file)
+      if (imageCaption) formData.append('caption', imageCaption)
+      if (replyTo) formData.append('replyToId', replyTo.id)
+
+      const res = await fetch('/api/messages/image', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: formData
+      })
+
+      if (!res.ok) throw new Error('Жіберу мүмкін болмады')
+
+      const data = await res.json()
+      addMessage(selectedChatId, data)
+      setImageFile(null)
+      setImageCaption('')
+      setReplyTo(null)
+      toast.success('Сурет жіберілді ✓')
+    } catch (err) {
+      toast.error(err.message || 'Сурет жіберу мүмкін болмады')
+    } finally {
+      setUploadingMedia(false)
+    }
+  }, [selectedChatId, imageCaption, replyTo])
+
+  // ===== ДЫБЫС ХАБАРЛАМАСЫ ЖІБЕРУ =====
+  const handleSendVoice = useCallback(async (audioBlob) => {
+    setShowAudioRecorder(false)
+    setUploadingMedia(true)
+    try {
+      const formData = new FormData()
+      formData.append('chatId', selectedChatId)
+      formData.append('file', audioBlob, 'voice.webm')
+      if (replyTo) formData.append('replyToId', replyTo.id)
+
+      const res = await fetch('/api/messages/voice', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: formData
+      })
+
+      if (!res.ok) throw new Error('Жіберу мүмкін болмады')
+
+      const data = await res.json()
+      addMessage(selectedChatId, data)
+      setReplyTo(null)
+      toast.success('Дыбыс жіберілді ✓')
+    } catch (err) {
+      toast.error(err.message || 'Дыбыс жіберу мүмкін болмады')
+    } finally {
+      setUploadingMedia(false)
+    }
+  }, [selectedChatId, replyTo])
 
   const handleKey = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend() }
@@ -96,7 +176,7 @@ export default function ChatWindow() {
 
   if (!chat) return null
 
-  // Жасырын чат — ашылмаған
+  // ===== ЖАСЫРЫН ЧАТ - АШЫЛМАҒАН =====
   const isLocked = chat.hidden && !isChatUnlocked(selectedChatId)
   if (isLocked) return (
     <div className="chat-locked">
@@ -190,17 +270,57 @@ export default function ChatWindow() {
         </div>
       )}
 
+      {/* ── AUDIO RECORDER ── */}
+      {showAudioRecorder && (
+        <AudioRecorder 
+          onRecordingComplete={handleSendVoice}
+          onCancel={() => setShowAudioRecorder(false)}
+        />
+      )}
+
+      {/* ── IMAGE UPLOAD ── */}
+      {imageFile && (
+        <div className="image-upload-preview">
+          <img src={URL.createObjectURL(imageFile)} alt="Preview" className="preview-thumb" />
+          <div className="image-upload-form">
+            <input 
+              type="text"
+              className="input"
+              placeholder="Сурет сипаттамасы (міндетті емес)"
+              value={imageCaption}
+              onChange={(e) => setImageCaption(e.target.value)}
+            />
+            <div className="image-upload-buttons">
+              <button className="btn btn-ghost btn-sm" onClick={() => { setImageFile(null); setImageCaption(''); }}>
+                ✕ Бас тарту
+              </button>
+              <button className="btn btn-primary btn-sm" onClick={() => handleSendImage(imageFile)} disabled={uploadingMedia}>
+                {uploadingMedia ? <><span className="spinner" style={{width:14,height:14}} /> Жүктелуде...</> : '➤ Жіберу'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── REPLY PREVIEW ── */}
       {replyTo && (
         <div className="reply-preview">
           <div className="reply-bar" />
           <div className="reply-content">
             <span className="reply-sender">{replyTo.sender?.name}</span>
-            <span className="reply-text">{replyTo.content}</span>
+            <span className="reply-text">{replyTo.content || '[Медиа]'}</span>
           </div>
           <button className="btn-icon" onClick={() => setReplyTo(null)}>✕</button>
         </div>
       )}
+
+      {/* ── INPUT TOOLS ── */}
+      <div className="input-tools">
+        <FileUploadInput type="image" onFileSelected={setImageFile} disabled={uploadingMedia || !!imageFile} />
+        <button className="btn btn-secondary btn-sm" onClick={() => setShowAudioRecorder(!showAudioRecorder)} disabled={uploadingMedia}>
+          🎤 Дыбыс
+        </button>
+      </div>
 
       {/* ── INPUT ── */}
       <div className="chat-input-bar">
@@ -214,9 +334,10 @@ export default function ChatWindow() {
           rows={1}
           style={{ height: 'auto' }}
           onInput={e => { e.target.style.height = 'auto'; e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px' }}
+          disabled={uploadingMedia}
         />
-        <button className="send-btn" onClick={handleSend} disabled={!input.trim() || sending}>
-          {sending ? <span className="spinner" style={{width:18,height:18}} /> : '➤'}
+        <button className="send-btn" onClick={handleSend} disabled={!input.trim() || sending || uploadingMedia}>
+          {sending || uploadingMedia ? <span className="spinner" style={{width:18,height:18}} /> : '➤'}
         </button>
       </div>
 
@@ -245,20 +366,34 @@ function MessageBubble({ message, isOwn, showAvatar, onReply, onDelete }) {
         {message.replyTo && (
           <div className="msg-reply">
             <span className="msg-reply-sender">{message.replyTo.sender?.name}</span>
-            <span className="msg-reply-text">{message.replyTo.content}</span>
+            <span className="msg-reply-text">{message.replyTo.content || '[Медиа]'}</span>
           </div>
         )}
 
-        <div className={`msg-bubble ${isOwn ? 'own' : 'other'} ${message.deleted ? 'deleted' : ''}`}>
-          {message.deleted
-            ? <span className="msg-deleted">🚫 Хабарлама өшірілді</span>
-            : <span className="msg-text">{message.content}</span>
-          }
-          <span className="msg-time">
-            {formatMessageTime(message.createdAt)}
-            {message.editedAt && ' ✎'}
-          </span>
-        </div>
+        {/* МЕДИА КӨРСЕТКІШ */}
+        <MediaViewer message={message} isOwn={isOwn} />
+
+        {/* МӘТІН ҚАБЫҒЫ */}
+        {message.content && message.type === 'TEXT' && (
+          <div className={`msg-bubble ${isOwn ? 'own' : 'other'} ${message.deleted ? 'deleted' : ''}`}>
+            {message.deleted
+              ? <span className="msg-deleted">🚫 Хабарлама өшірілді</span>
+              : <span className="msg-text">{message.content}</span>
+            }
+            <span className="msg-time">
+              {formatMessageTime(message.createdAt)}
+              {message.editedAt && ' ✎'}
+            </span>
+          </div>
+        )}
+
+        {/* IMAGE CAPTION ПУЗЫРЬ */}
+        {message.content && message.type === 'IMAGE' && (
+          <div className={`msg-bubble ${isOwn ? 'own' : 'other'}`}>
+            <span className="msg-text">{message.content}</span>
+            <span className="msg-time">{formatMessageTime(message.createdAt)}</span>
+          </div>
+        )}
 
         {/* Action buttons */}
         {!message.deleted && (

@@ -24,7 +24,7 @@ public class Requests {
         @NotBlank private String password;
     }
 
-    @Getter @Setter @NoArgsConstructor @AllArgsConstructor
+    @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
     public static class UpdateProfileRequest {
         @Size(min=1, max=100)
         private String name;
@@ -37,13 +37,13 @@ public class Requests {
         private Boolean notificationsEnabled;
     }
 
-    @Getter @Setter @NoArgsConstructor @AllArgsConstructor
+    @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
     public static class ChangePasswordRequest {
         @NotBlank private String currentPassword;
         @NotBlank @Size(min=6) private String newPassword;
     }
 
-    @Getter @Setter @NoArgsConstructor @AllArgsConstructor
+    @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
     public static class CreateChatRequest {
         @NotBlank private String type;
         private String name;
@@ -51,19 +51,19 @@ public class Requests {
         private java.util.List<Long> memberIds;
     }
 
-    @Getter @Setter @NoArgsConstructor @AllArgsConstructor
+    @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
     public static class SendMessageRequest {
         @NotNull private Long chatId;
         @NotBlank private String content;
         private Long replyToId;
     }
 
-    @Getter @Setter @NoArgsConstructor @AllArgsConstructor
+    @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
     public static class PinRequest {
         @NotBlank @Size(min=4, max=6) private String pin;
     }
 
-    @Getter @Setter @NoArgsConstructor @AllArgsConstructor
+    @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
     public static class AddMemberRequest {
         @NotNull private Long userId;
     }

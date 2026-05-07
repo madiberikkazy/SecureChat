@@ -56,5 +56,5 @@ public class Message {
     @JoinColumn(name = "reply_to_id")
     private Message replyTo;
 
-    public enum MessageType { TEXT, IMAGE, FILE, SYSTEM }
+    public enum MessageType { TEXT, IMAGE, FILE, VOICE, SYSTEM }
 }

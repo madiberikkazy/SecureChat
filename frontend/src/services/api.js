@@ -49,8 +49,11 @@ export const chatAPI = {
 }
 
 export const messageAPI = {
-  send:   d  => api.post('/messages', d),
-  delete: id => api.delete(`/messages/${id}`),
+  send:        d  => api.post('/messages', d),
+  sendImage:   (form) => api.post('/messages/image', form, { headers: { 'Content-Type': 'multipart/form-data' } }),
+  sendVoice:   (form) => api.post('/messages/voice', form, { headers: { 'Content-Type': 'multipart/form-data' } }),
+  sendFile:    (form) => api.post('/messages/file', form, { headers: { 'Content-Type': 'multipart/form-data' } }),
+  delete:      id => api.delete(`/messages/${id}`),
 }
 
 export default api
