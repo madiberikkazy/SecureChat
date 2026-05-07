@@ -8,7 +8,9 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
 import java.time.LocalDateTime;
 
 @Service
@@ -21,6 +23,7 @@ public class MessageService {
     private final UserRepository userRepo;
     private final SimpMessagingTemplate ws;
     private final MapperService mapper;
+    private final FileService fileService;
 
     // ===== ХАБАРЛАМА ЖІБЕРУ =====
     @Transactional
@@ -43,6 +46,7 @@ public class MessageService {
                 .chat(chat)
                 .sender(sender)
                 .content(req.getContent().trim())
+                .type(Message.MessageType.TEXT)
                 .replyTo(replyTo)
                 .build();
 
@@ -55,7 +59,110 @@ public class MessageService {
         MessageDto dto = mapper.toMessageDto(message);
 
         // WebSocket арқылы чат мүшелеріне жіберу
-        // Барлық мүшелер /topic/chat/{chatId} арнасына жазылады
+        broadcast(chat.getId(), "NEW_MESSAGE", dto);
+
+        return dto;
+    }
+
+    // ===== СУРЕТ ХАБАРЛАМАСЫ ЖІБЕРУ =====
+    @Transactional
+    public MessageDto sendImageMessage(Long chatId, String content, MultipartFile imageFile, 
+                                       Long replyToId, User sender) throws IOException {
+        Chat chat = chatRepo.findById(chatId)
+                .orElseThrow(() -> new RuntimeException("Чат табылмады"));
+
+        if (!memberRepo.existsByChatIdAndUserIdAndActiveTrue(chat.getId(), sender.getId()))
+            throw new RuntimeException("Сіз бұл чатта мүше емессіз");
+
+        // Файлды жүктеу
+        String fileUrl = fileService.uploadImage(imageFile, chatId, sender.getId());
+
+        Message replyTo = replyToId != null ? messageRepo.findById(replyToId).orElse(null) : null;
+
+        Message message = Message.builder()
+                .chat(chat)
+                .sender(sender)
+                .content(content != null && !content.isBlank() ? content : null)
+                .type(Message.MessageType.IMAGE)
+                .fileUrl(fileUrl)
+                .replyTo(replyTo)
+                .build();
+
+        messageRepo.save(message);
+
+        chat.setLastMessageAt(LocalDateTime.now());
+        chatRepo.save(chat);
+
+        MessageDto dto = mapper.toMessageDto(message);
+        broadcast(chat.getId(), "NEW_MESSAGE", dto);
+
+        return dto;
+    }
+
+    // ===== ДЫБЫС ХАБАРЛАМАСЫ ЖІБЕРУ =====
+    @Transactional
+    public MessageDto sendVoiceMessage(Long chatId, MultipartFile voiceFile, 
+                                      Long replyToId, User sender) throws IOException {
+        Chat chat = chatRepo.findById(chatId)
+                .orElseThrow(() -> new RuntimeException("Чат табылмады"));
+
+        if (!memberRepo.existsByChatIdAndUserIdAndActiveTrue(chat.getId(), sender.getId()))
+            throw new RuntimeException("Сіз бұл чатта мүше емессіз");
+
+        // Дыбыс файлын жүктеу
+        String fileUrl = fileService.uploadVoiceMessage(voiceFile, chatId, sender.getId());
+
+        Message replyTo = replyToId != null ? messageRepo.findById(replyToId).orElse(null) : null;
+
+        Message message = Message.builder()
+                .chat(chat)
+                .sender(sender)
+                .type(Message.MessageType.VOICE)
+                .fileUrl(fileUrl)
+                .replyTo(replyTo)
+                .build();
+
+        messageRepo.save(message);
+
+        chat.setLastMessageAt(LocalDateTime.now());
+        chatRepo.save(chat);
+
+        MessageDto dto = mapper.toMessageDto(message);
+        broadcast(chat.getId(), "NEW_MESSAGE", dto);
+
+        return dto;
+    }
+
+    // ===== ФАЙЛ ХАБАРЛАМАСЫ ЖІБЕРУ =====
+    @Transactional
+    public MessageDto sendFileMessage(Long chatId, String fileName, MultipartFile file, 
+                                     Long replyToId, User sender) throws IOException {
+        Chat chat = chatRepo.findById(chatId)
+                .orElseThrow(() -> new RuntimeException("Чат табылмады"));
+
+        if (!memberRepo.existsByChatIdAndUserIdAndActiveTrue(chat.getId(), sender.getId()))
+            throw new RuntimeException("Сіз бұл чатта мүше емессіз");
+
+        // Файлды жүктеу
+        String fileUrl = fileService.uploadFile(file, chatId, sender.getId());
+
+        Message replyTo = replyToId != null ? messageRepo.findById(replyToId).orElse(null) : null;
+
+        Message message = Message.builder()
+                .chat(chat)
+                .sender(sender)
+                .content(fileName != null && !fileName.isBlank() ? fileName : "Файл")
+                .type(Message.MessageType.FILE)
+                .fileUrl(fileUrl)
+                .replyTo(replyTo)
+                .build();
+
+        messageRepo.save(message);
+
+        chat.setLastMessageAt(LocalDateTime.now());
+        chatRepo.save(chat);
+
+        MessageDto dto = mapper.toMessageDto(message);
         broadcast(chat.getId(), "NEW_MESSAGE", dto);
 
         return dto;
@@ -69,6 +176,11 @@ public class MessageService {
 
         if (!msg.getSender().getId().equals(user.getId()))
             throw new RuntimeException("Тек өз хабарламаңызды өшіре аласыз");
+
+        // Файлды өшіру
+        if (msg.getFileUrl() != null) {
+            fileService.deleteFile(msg.getFileUrl());
+        }
 
         msg.setDeleted(true);
         msg.setDeletedAt(LocalDateTime.now().toString());

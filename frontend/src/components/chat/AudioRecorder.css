@@ -1,0 +1,118 @@
+.audio-recorder {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: 16px;
+  margin-bottom: 12px;
+}
+
+.recorder-mode {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 20px 16px;
+}
+
+.recorder-mode.recording {
+  background: var(--danger-dim);
+  border: 1px solid var(--danger);
+  border-radius: var(--r-sm);
+  padding: 16px;
+}
+
+.recording-indicator {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 600;
+  color: var(--danger);
+}
+
+.recording-pulse {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--danger);
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.recording-time {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--danger);
+}
+
+/* PLAYBACK */
+.playback-mode {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.playback-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--bg-tertiary);
+  padding: 12px 16px;
+  border-radius: var(--r-sm);
+}
+
+.play-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: none;
+  cursor: pointer;
+  color: white;
+  font-size: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all var(--t);
+}
+
+.play-btn:hover { 
+  background: var(--accent-hover);
+  transform: scale(1.05);
+}
+
+.play-btn.playing { 
+  background: var(--text-secondary);
+}
+
+.playback-time {
+  font-size: 14px;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.hidden-audio { display: none; }
+
+.playback-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.playback-actions .btn {
+  padding: 7px 14px;
+  font-size: 12px;
+}
+
+@media (max-width: 768px) {
+  .audio-recorder {
+    margin: 0 -16px 12px -16px;
+    border-radius: 0;
+    border-left: none;
+    border-right: none;
+  }
+}

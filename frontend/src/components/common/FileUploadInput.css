@@ -1,0 +1,46 @@
+.file-upload-input {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.preview-container {
+  position: relative;
+  display: inline-block;
+  border-radius: var(--r-sm);
+  overflow: hidden;
+  max-width: 200px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+}
+
+.preview-image {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 200px;
+  object-fit: cover;
+}
+
+.btn-remove-preview {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.6);
+  border: none;
+  cursor: pointer;
+  color: white;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background var(--t);
+}
+
+.btn-remove-preview:hover {
+  background: rgba(0, 0, 0, 0.8);
+}
