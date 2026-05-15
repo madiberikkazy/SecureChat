@@ -1,17 +1,28 @@
 package com.securechat.service;
 
-import com.securechat.dto.request.Requests.*;
-import com.securechat.dto.response.Responses.*;
-import com.securechat.entity.*;
-import com.securechat.repository.*;
-import lombok.RequiredArgsConstructor;
+import java.io.IOException;
+import java.time.LocalDateTime;
+
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.io.IOException;
-import java.time.LocalDateTime;
+import com.securechat.dto.request.Requests.*;
+import com.securechat.dto.request.Requests.SendMessageRequest;
+import com.securechat.dto.response.Responses.*;
+import com.securechat.dto.response.Responses.MessageDto;
+import com.securechat.dto.response.Responses.TypingDto;
+import com.securechat.dto.response.Responses.WebSocketMessageDto;
+import com.securechat.entity.Chat;
+import com.securechat.entity.Message;
+import com.securechat.entity.User;
+import com.securechat.repository.ChatMemberRepository;
+import com.securechat.repository.ChatRepository;
+import com.securechat.repository.MessageRepository;
+import com.securechat.repository.UserRepository;
+
+import lombok.RequiredArgsConstructor;
 
 @Service
 @RequiredArgsConstructor
@@ -35,9 +46,8 @@ public class MessageService {
             throw new RuntimeException("Сіз бұл чатта мүше емессіз");
 
         if (req.getContent() == null || req.getContent().isBlank())
-            throw new RuntimeException("Хабарлама бос болмауы тиіс");
+            throw new RuntimeException("Хабарлама бос болмауы тііс");
 
-        // Жауап берілген хабарлама
         Message replyTo = null;
         if (req.getReplyToId() != null)
             replyTo = messageRepo.findById(req.getReplyToId()).orElse(null);
@@ -52,13 +62,10 @@ public class MessageService {
 
         messageRepo.save(message);
 
-        // Чаттың lastMessageAt жаңарту
         chat.setLastMessageAt(LocalDateTime.now());
         chatRepo.save(chat);
 
         MessageDto dto = mapper.toMessageDto(message);
-
-        // WebSocket арқылы чат мүшелеріне жіберу
         broadcast(chat.getId(), "NEW_MESSAGE", dto);
 
         return dto;
@@ -74,7 +81,6 @@ public class MessageService {
         if (!memberRepo.existsByChatIdAndUserIdAndActiveTrue(chat.getId(), sender.getId()))
             throw new RuntimeException("Сіз бұл чатта мүше емессіз");
 
-        // Файлды жүктеу
         String fileUrl = fileService.uploadImage(imageFile, chatId, sender.getId());
 
         Message replyTo = replyToId != null ? messageRepo.findById(replyToId).orElse(null) : null;
@@ -109,7 +115,6 @@ public class MessageService {
         if (!memberRepo.existsByChatIdAndUserIdAndActiveTrue(chat.getId(), sender.getId()))
             throw new RuntimeException("Сіз бұл чатта мүше емессіз");
 
-        // Дыбыс файлын жүктеу
         String fileUrl = fileService.uploadVoiceMessage(voiceFile, chatId, sender.getId());
 
         Message replyTo = replyToId != null ? messageRepo.findById(replyToId).orElse(null) : null;
@@ -143,7 +148,6 @@ public class MessageService {
         if (!memberRepo.existsByChatIdAndUserIdAndActiveTrue(chat.getId(), sender.getId()))
             throw new RuntimeException("Сіз бұл чатта мүше емессіз");
 
-        // Файлды жүктеу
         String fileUrl = fileService.uploadFile(file, chatId, sender.getId());
 
         Message replyTo = replyToId != null ? messageRepo.findById(replyToId).orElse(null) : null;
@@ -177,7 +181,6 @@ public class MessageService {
         if (!msg.getSender().getId().equals(user.getId()))
             throw new RuntimeException("Тек өз хабарламаңызды өшіре аласыз");
 
-        // Файлды өшіру
         if (msg.getFileUrl() != null) {
             fileService.deleteFile(msg.getFileUrl());
         }

@@ -1,8 +1,24 @@
 package com.securechat.entity;
 
-import jakarta.persistence.*;
-import lombok.*;
 import java.time.LocalDateTime;
+
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.Index;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
+import jakarta.persistence.Table;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 
 @Entity
 @Table(name = "messages",
@@ -26,35 +42,31 @@ public class Message {
     @JoinColumn(name = "sender_id", nullable = false)
     private User sender;
 
-    @Column(nullable = false, columnDefinition = "TEXT")
+    @Column(columnDefinition = "TEXT")
     private String content;
 
-    // Хабарлама түрі: TEXT, IMAGE, FILE, SYSTEM
     @Enumerated(EnumType.STRING)
     @Builder.Default
     private MessageType type = MessageType.TEXT;
 
-    // Файл URL (IMAGE/FILE типі үшін)
     @Column(length = 500)
     private String fileUrl;
 
     @Builder.Default
     private boolean deleted = false;
 
-    // Өшірілген хабарламаның мазмұны
     private String deletedAt;
 
     @Column(nullable = false)
     @Builder.Default
     private LocalDateTime createdAt = LocalDateTime.now();
 
-    // Өзгертілген уақыт
     private LocalDateTime editedAt;
 
-    // Жауап берілген хабарлама
     @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "reply_to_id")
     private Message replyTo;
 
+    // VOICE типі қосылды
     public enum MessageType { TEXT, IMAGE, FILE, VOICE, SYSTEM }
 }
