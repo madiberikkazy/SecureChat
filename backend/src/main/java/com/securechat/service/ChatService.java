@@ -1,18 +1,32 @@
 package com.securechat.service;
 
-import com.securechat.dto.request.Requests.*;
-import com.securechat.dto.response.Responses.*;
-import com.securechat.entity.*;
-import com.securechat.repository.*;
-import lombok.RequiredArgsConstructor;
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.stream.Collectors;
+
 import org.springframework.data.domain.PageRequest;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDateTime;
-import java.util.*;
-import java.util.stream.Collectors;
+import com.securechat.dto.request.Requests.CreateChatRequest;
+import com.securechat.dto.request.Requests.UpdateGroupRequest;
+import com.securechat.dto.response.Responses.ChatDto;
+import com.securechat.dto.response.Responses.MessageDto;
+import com.securechat.entity.Chat;
+import com.securechat.entity.ChatMember;
+import com.securechat.entity.HiddenChat;
+import com.securechat.entity.User;
+import com.securechat.repository.ChatMemberRepository;
+import com.securechat.repository.ChatRepository;
+import com.securechat.repository.HiddenChatRepository;
+import com.securechat.repository.MessageReadStatusRepository;
+import com.securechat.repository.MessageRepository;
+import com.securechat.repository.UserRepository;
+
+import lombok.RequiredArgsConstructor;
 
 @Service
 @RequiredArgsConstructor
@@ -31,7 +45,15 @@ public class ChatService {
     public List<ChatDto> getUserChats(User user) {
         return chatRepo.findAllByUserId(user.getId())
                 .stream()
-                .map(chat -> buildChatDto(chat, user))
+                .map(chat -> {
+                    try {
+                        return buildChatDto(chat, user);
+                    } catch (Exception e) {
+                        // Бір чаттың қатесі барлық тізімді бұзбасын
+                        return null;
+                    }
+                })
+                .filter(Objects::nonNull)
                 .collect(Collectors.toList());
     }
 
@@ -43,18 +65,10 @@ public class ChatService {
         return buildChatDto(chat, user);
     }
 
-    // ===== ЧАТТЫҢ ХАБАРЛАМАЛАРЫН АЛУ (PIN ТЕКСЕРІСІМЕН) =====
+    // ===== ЧАТТЫҢ ХАБАРЛАМАЛАРЫН АЛУ =====
     public List<MessageDto> getMessages(Long chatId, User user) {
         assertMember(chatId, user.getId());
-        
-        Chat chat = chatRepo.findById(chatId)
-                .orElseThrow(() -> new RuntimeException("Чат табылмады"));
-
-        // Чат жасырын болса — PIN енгізілгенін тексеру
-        if (isHidden(chatId, user.getId())) {
-            throw new RuntimeException("Бұл чат жасырын. Алдымен PIN-кодты енгізіңіз.");
-        }
-
+        // Жасырын чат тексеруі — фронтенд жағынан басқарылады (PinModal)
         return messageRepo.findByChatIdOrderByCreatedAtAsc(chatId)
                 .stream()
                 .map(mapper::toMessageDto)
@@ -66,7 +80,6 @@ public class ChatService {
     public ChatDto createChat(CreateChatRequest req, User creator) {
         Chat.ChatType type = Chat.ChatType.valueOf(req.getType().toUpperCase());
 
-        // Жеке чат — бұрыннан бар болса қайтар
         if (type == Chat.ChatType.PRIVATE && req.getMemberIds().size() == 1) {
             Long otherId = req.getMemberIds().get(0);
             Optional<Chat> existing = chatRepo.findPrivateChat(creator.getId(), otherId);
@@ -80,10 +93,8 @@ public class ChatService {
                 .build();
         chatRepo.save(chat);
 
-        // Жасаушы — OWNER
         addMember(chat, creator, ChatMember.Role.OWNER);
 
-        // Басқа мүшелерді қосу
         for (Long uid : req.getMemberIds()) {
             if (!uid.equals(creator.getId())) {
                 User member = userRepo.findById(uid)
@@ -104,7 +115,6 @@ public class ChatService {
         if (chat.getType() != Chat.ChatType.GROUP)
             throw new RuntimeException("Бұл топтық чат емес");
 
-        // Тек OWNER немесе ADMIN қоса алады
         ChatMember reqMember = memberRepo.findByChatIdAndUserId(chatId, requester.getId())
                 .orElseThrow(() -> new RuntimeException("Рұқсат жоқ"));
         if (reqMember.getRole() == ChatMember.Role.MEMBER)
@@ -116,7 +126,6 @@ public class ChatService {
         User newMember = userRepo.findById(userId)
                 .orElseThrow(() -> new RuntimeException("Пайдаланушы табылмады"));
 
-        // Бұрын кеткен болса — active-ді қайта орнат
         Optional<ChatMember> existing = memberRepo.findByChatIdAndUserId(chatId, userId);
         if (existing.isPresent()) {
             existing.get().setActive(true);
@@ -171,12 +180,11 @@ public class ChatService {
     @Transactional
     public void setPin(Long chatId, String pin, User user) {
         assertMember(chatId, user.getId());
-        Chat chat = chatRepo.findById(chatId)
-                .orElseThrow(() -> new RuntimeException("Чат табылмады"));
-
         if (pin == null || pin.length() < 4) {
             throw new RuntimeException("PIN-код кемінде 4 цифр болуы керек");
         }
+        Chat chat = chatRepo.findById(chatId)
+                .orElseThrow(() -> new RuntimeException("Чат табылмады"));
 
         Optional<HiddenChat> existing = hiddenRepo.findByChatIdAndUserId(chatId, user.getId());
         if (existing.isPresent()) {
@@ -192,10 +200,6 @@ public class ChatService {
 
     // ===== PIN ТЕКСЕРУ =====
     public boolean verifyPin(Long chatId, String pin, User user) {
-        if (!isHidden(chatId, user.getId())) {
-            throw new RuntimeException("Бұл чат жасырын емес");
-        }
-
         return hiddenRepo.findByChatIdAndUserId(chatId, user.getId())
                 .map(h -> encoder.matches(pin, h.getPinHash()))
                 .orElseThrow(() -> new RuntimeException("Жасырын чат табылмады"));
@@ -222,27 +226,31 @@ public class ChatService {
         });
     }
 
-    // ===== ЧАТТЫҢ ЖАСЫРЫН ЕКЕНІН ТЕКСЕРУ =====
-    private boolean isHidden(Long chatId, Long userId) {
-        return hiddenRepo.existsByChatIdAndUserId(chatId, userId);
-    }
-
-    // ===== ChatDto ЖАСАУ =====
+    // ===== ChatDto ЖАСАУ — null-safe =====
     private ChatDto buildChatDto(Chat chat, User currentUser) {
         List<ChatMember> members = memberRepo.findByChatIdAndActiveTrue(chat.getId());
 
-        // Соңғы хабарлама
         List<com.securechat.entity.Message> lastMsgs =
                 messageRepo.findByChatIdOrderByCreatedAtDesc(chat.getId(), PageRequest.of(0, 1));
         MessageDto lastMsg = lastMsgs.isEmpty() ? null : mapper.toMessageDto(lastMsgs.get(0));
 
-        // Оқылмаған хабарламалар саны
-        LocalDateTime lastRead = readStatusRepo
-                .findLastReadTime(chat.getId(), currentUser.getId())
-                .orElse(currentUser.getCreatedAt());
-        long unread = messageRepo.countUnread(chat.getId(), currentUser.getId(), lastRead);
+        // null-safe fallback: егер createdAt null болса, ескі дата қолдан
+        LocalDateTime fallbackDate = LocalDateTime.of(2020, 1, 1, 0, 0);
+        LocalDateTime userCreatedAt = currentUser.getCreatedAt() != null
+                ? currentUser.getCreatedAt()
+                : fallbackDate;
 
-        boolean hidden = isHidden(chat.getId(), currentUser.getId());
+        long unread = 0;
+        try {
+            LocalDateTime lastRead = readStatusRepo
+                    .findLastReadTime(chat.getId(), currentUser.getId())
+                    .orElse(userCreatedAt);
+            unread = messageRepo.countUnread(chat.getId(), currentUser.getId(), lastRead);
+        } catch (Exception ignored) {
+            // Оқылмаған санын алу мүмкін болмаса, 0 қайтарамыз
+        }
+
+        boolean hidden = hiddenRepo.existsByChatIdAndUserId(chat.getId(), currentUser.getId());
 
         return ChatDto.builder()
                 .id(chat.getId())

@@ -9,13 +9,15 @@ import Avatar from '../common/Avatar'
 import PinModal from './PinModal'
 import MediaViewer from './MediaViewer'
 import AudioRecorder from './AudioRecorder'
-import FileUploadInput from '../common/FileUploadInput'
 import { getChatName, getChatOtherUser, formatMessageTime, formatLastSeen, getInitials } from '../../utils/helpers'
 import './ChatWindow.css'
 
 export default function ChatWindow() {
   const { user } = useAuth()
-  const { selectedChatId, chats, messages, setMessages, addMessage, typingUsers, isChatUnlocked, unlockChat, clearUnread, upsertChat } = useChatStore()
+  const {
+    selectedChatId, chats, messages, setMessages, addMessage,
+    typingUsers, isChatUnlocked, unlockChat, clearUnread, upsertChat
+  } = useChatStore()
   const toast = useToast()
 
   const chat = chats.find(c => c.id === selectedChatId)
@@ -36,14 +38,17 @@ export default function ChatWindow() {
   const bottomRef = useRef(null)
   const inputRef = useRef(null)
   const typingTimer = useRef(null)
+  const fileInputRef = useRef(null)
 
-  // WebSocket арнасына жазылу
   useChatWebSocket(selectedChatId)
 
-  // Хабарламаларды жүктеу
+  // ===== ХАБАРЛАМАЛАРДЫ ЖҮКТЕУ =====
   useEffect(() => {
     if (!selectedChatId) return
-    if (chat?.hidden && !isChatUnlocked(selectedChatId)) return
+    if (chat?.hidden && !isChatUnlocked(selectedChatId)) {
+      setLoading(false)
+      return
+    }
 
     setLoading(true)
     chatAPI.getMessages(selectedChatId)
@@ -51,26 +56,18 @@ export default function ChatWindow() {
         setMessages(selectedChatId, res.data)
         clearUnread(selectedChatId)
       })
-      .catch((err) => {
-        // PIN қажет болса
-        if (err.response?.status === 403 || err.response?.data?.error?.includes('жасырын')) {
-          setShowPin(true)
-          toast.info('PIN-кодты енгізіңіз')
-        } else {
-          toast.error('Хабарламаларды жүктеу мүмкін болмады')
-        }
-      })
+      .catch(() => toast.error('Хабарламаларды жүктеу мүмкін болмады'))
       .finally(() => setLoading(false))
 
     inputRef.current?.focus()
   }, [selectedChatId, isChatUnlocked(selectedChatId)])
 
-  // Соңғы хабарламаға скролл
+  // ===== СОҢҒЫ ХАБАРЛАМАҒА СКРОЛЛ =====
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [chatMessages.length])
 
-  // Typing индикаторы
+  // ===== TYPING =====
   const handleInputChange = (e) => {
     setInput(e.target.value)
     wsService.sendTyping(selectedChatId, true)
@@ -78,7 +75,7 @@ export default function ChatWindow() {
     typingTimer.current = setTimeout(() => wsService.sendTyping(selectedChatId, false), 2000)
   }
 
-  // ===== МӘТІН ХАБАРЛАМАСЫ ЖІБЕРУ =====
+  // ===== МӘТІН ЖІБЕРУ =====
   const handleSend = useCallback(async () => {
     const content = input.trim()
     if (!content || sending) return
@@ -102,7 +99,6 @@ export default function ChatWindow() {
   // ===== СУРЕТ ЖІБЕРУ =====
   const handleSendImage = useCallback(async (file) => {
     if (!file) return
-    
     setUploadingMedia(true)
     try {
       const formData = new FormData()
@@ -111,30 +107,25 @@ export default function ChatWindow() {
       if (imageCaption) formData.append('caption', imageCaption)
       if (replyTo) formData.append('replyToId', replyTo.id)
 
+      const token = localStorage.getItem('token')
       const res = await fetch('/api/messages/image', {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
+        headers: { 'Authorization': `Bearer ${token}` },
         body: formData
       })
 
       if (!res.ok) throw new Error('Жіберу мүмкін болмады')
-
       const data = await res.json()
       addMessage(selectedChatId, data)
       setImageFile(null)
       setImageCaption('')
       setReplyTo(null)
-      toast.success('Сурет жіберілді ✓')
     } catch (err) {
       toast.error(err.message || 'Сурет жіберу мүмкін болмады')
-    } finally {
-      setUploadingMedia(false)
-    }
+    } finally { setUploadingMedia(false) }
   }, [selectedChatId, imageCaption, replyTo])
 
-  // ===== ДЫБЫС ХАБАРЛАМАСЫ ЖІБЕРУ =====
+  // ===== ДЫБЫС ЖІБЕРУ =====
   const handleSendVoice = useCallback(async (audioBlob) => {
     setShowAudioRecorder(false)
     setUploadingMedia(true)
@@ -144,25 +135,20 @@ export default function ChatWindow() {
       formData.append('file', audioBlob, 'voice.webm')
       if (replyTo) formData.append('replyToId', replyTo.id)
 
+      const token = localStorage.getItem('token')
       const res = await fetch('/api/messages/voice', {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
+        headers: { 'Authorization': `Bearer ${token}` },
         body: formData
       })
 
-      if (!res.ok) throw new Error('Жіберу мүмкін болмады')
-
+      if (!res.ok) throw new Error()
       const data = await res.json()
       addMessage(selectedChatId, data)
       setReplyTo(null)
-      toast.success('Дыбыс жіберілді ✓')
-    } catch (err) {
-      toast.error(err.message || 'Дыбыс жіберу мүмкін болмады')
-    } finally {
-      setUploadingMedia(false)
-    }
+    } catch {
+      toast.error('Дыбыс жіберу мүмкін болмады')
+    } finally { setUploadingMedia(false) }
   }, [selectedChatId, replyTo])
 
   const handleKey = (e) => {
@@ -176,16 +162,16 @@ export default function ChatWindow() {
 
   if (!chat) return null
 
-  // ===== ЖАСЫРЫН ЧАТ - АШЫЛМАҒАН =====
+  // ===== ЖАСЫРЫН ЧАТ =====
   const isLocked = chat.hidden && !isChatUnlocked(selectedChatId)
   if (isLocked) return (
     <div className="chat-locked">
       <div className="locked-content">
-        <span className="locked-icon">🔒</span>
+        <div className="locked-icon-wrap">🔒</div>
         <h3>Жасырын чат</h3>
         <p>Бұл чатты ашу үшін PIN-кодты енгізіңіз</p>
         <button className="btn btn-primary btn-lg" onClick={() => setShowPin(true)}>
-          PIN енгізу
+          🔓 PIN енгізу
         </button>
       </div>
       {showPin && <PinModal chatId={selectedChatId} mode="verify" onClose={() => setShowPin(false)} />}
@@ -198,104 +184,130 @@ export default function ChatWindow() {
 
   return (
     <div className="chat-window">
+
       {/* ── HEADER ── */}
       <div className="chat-header">
         <div className="chat-header-info">
-          <div className="chat-avatar">
+          <div className="chat-avatar-wrap">
             {chat.avatarUrl || otherUser?.avatarUrl
-              ? <img src={chat.avatarUrl || otherUser?.avatarUrl} alt={chatName} />
-              : <span>{getInitials(chatName)}</span>
+              ? <img src={chat.avatarUrl || otherUser?.avatarUrl} alt={chatName} className="chat-avatar-img" />
+              : <div className="chat-avatar-initials">{getInitials(chatName)}</div>
             }
             {otherUser?.online && <span className="avatar-dot" />}
           </div>
-          <div>
+          <div className="chat-header-text">
             <div className="chat-header-name">{chatName}</div>
             <div className="chat-header-sub">
-              {chat.type === 'GROUP'
-                ? `${chat.members?.length || 0} мүше`
-                : formatLastSeen(otherUser?.lastSeen, otherUser?.online)}
+              {typingList.length > 0
+                ? <span className="typing-status">✏️ жазуда...</span>
+                : chat.type === 'GROUP'
+                  ? `${chat.members?.length || 0} мүше`
+                  : formatLastSeen(otherUser?.lastSeen, otherUser?.online)}
             </div>
           </div>
         </div>
 
         <div className="chat-header-actions">
           {!chat.hidden
-            ? <button className="btn-icon" title="Жасырын чат орнату" onClick={() => setShowPin(true)}>🔒</button>
-            : <button className="btn-icon" title="Жасырын режимді алу" onClick={async () => {
-                await chatAPI.removePin(selectedChatId)
-                upsertChat({ ...chat, hidden: false })
-                toast.success('Жасырын режим алынды')
-              }}>🔓</button>
+            ? (
+              <button className="btn-icon header-btn" title="Жасырын чат орнату" onClick={() => setShowPin(true)}>
+                🔒
+              </button>
+            )
+            : (
+              <button className="btn-icon header-btn" title="Жасырын режимді алу"
+                onClick={async () => {
+                  await chatAPI.removePin(selectedChatId)
+                  upsertChat({ ...chat, hidden: false })
+                  toast.success('Жасырын режим алынды')
+                }}>
+                🔓
+              </button>
+            )
           }
-          <button className="btn-icon" title="Чат ақпараты" onClick={() => setShowInfo(v => !v)}>ℹ️</button>
+          <button className="btn-icon header-btn" title="Чат ақпараты" onClick={() => setShowInfo(v => !v)}>
+            ℹ️
+          </button>
         </div>
       </div>
 
       {/* ── INFO PANEL ── */}
-      {showInfo && <ChatInfoPanel chat={chat} user={user} onClose={() => setShowInfo(false)} />}
+      {showInfo && <ChatInfoPanel chat={chat} onClose={() => setShowInfo(false)} />}
 
       {/* ── MESSAGES ── */}
       <div className="messages-area">
         {loading
-          ? <div className="msgs-loading"><span className="spinner" /></div>
+          ? (
+            <div className="msgs-loading">
+              <span className="spinner" style={{ width: 32, height: 32 }} />
+            </div>
+          )
           : chatMessages.length === 0
-            ? <div className="msgs-empty"><span>💬</span><p>Хабарлама жоқ. Бірінші болып жазыңыз!</p></div>
-            : <>
-                {chatMessages.map((msg, i) => {
-                  const isOwn = msg.sender?.id === user?.id
-                  const showDate = i === 0 || !sameDay(chatMessages[i-1]?.createdAt, msg.createdAt)
-                  return (
-                    <div key={msg.id}>
-                      {showDate && <DateDivider date={msg.createdAt} />}
-                      <MessageBubble
-                        message={msg}
-                        isOwn={isOwn}
-                        showAvatar={chat.type === 'GROUP'}
-                        onReply={() => setReplyTo(msg)}
-                        onDelete={isOwn ? () => handleDelete(msg.id) : null}
-                      />
-                    </div>
-                  )
-                })}
-              </>
+            ? (
+              <div className="msgs-empty">
+                <span>💬</span>
+                <p>Хабарлама жоқ. Бірінші болып жазыңыз!</p>
+              </div>
+            )
+            : chatMessages.map((msg, i) => {
+                const isOwn = msg.sender?.id === user?.id
+                const showDate = i === 0 || !sameDay(chatMessages[i-1]?.createdAt, msg.createdAt)
+                const showSenderName = !isOwn && chat.type === 'GROUP'
+                  && (i === 0 || chatMessages[i-1]?.sender?.id !== msg.sender?.id)
+
+                return (
+                  <div key={msg.id}>
+                    {showDate && <DateDivider date={msg.createdAt} />}
+                    <MessageBubble
+                      message={msg}
+                      isOwn={isOwn}
+                      showSenderName={showSenderName}
+                      onReply={() => setReplyTo(msg)}
+                      onDelete={isOwn && !msg.deleted ? () => handleDelete(msg.id) : null}
+                    />
+                  </div>
+                )
+              })
         }
         <div ref={bottomRef} />
       </div>
 
-      {/* ── TYPING ── */}
+      {/* ── TYPING INDICATOR ── */}
       {typingList.length > 0 && (
         <div className="typing-indicator">
-          <span className="typing-dots"><span/><span/><span/></span>
+          <div className="typing-dots"><span /><span /><span /></div>
           <span>{typingList.join(', ')} жазуда...</span>
         </div>
       )}
 
       {/* ── AUDIO RECORDER ── */}
       {showAudioRecorder && (
-        <AudioRecorder 
+        <AudioRecorder
           onRecordingComplete={handleSendVoice}
           onCancel={() => setShowAudioRecorder(false)}
         />
       )}
 
-      {/* ── IMAGE UPLOAD ── */}
+      {/* ── IMAGE PREVIEW ── */}
       {imageFile && (
         <div className="image-upload-preview">
           <img src={URL.createObjectURL(imageFile)} alt="Preview" className="preview-thumb" />
           <div className="image-upload-form">
-            <input 
+            <input
               type="text"
               className="input"
-              placeholder="Сурет сипаттамасы (міндетті емес)"
+              placeholder="Сипаттама қосу (міндетті емес)..."
               value={imageCaption}
               onChange={(e) => setImageCaption(e.target.value)}
             />
-            <div className="image-upload-buttons">
+            <div className="image-upload-actions">
               <button className="btn btn-ghost btn-sm" onClick={() => { setImageFile(null); setImageCaption(''); }}>
                 ✕ Бас тарту
               </button>
               <button className="btn btn-primary btn-sm" onClick={() => handleSendImage(imageFile)} disabled={uploadingMedia}>
-                {uploadingMedia ? <><span className="spinner" style={{width:14,height:14}} /> Жүктелуде...</> : '➤ Жіберу'}
+                {uploadingMedia
+                  ? <><span className="spinner" style={{ width: 14, height: 14 }} /> Жіберілуде...</>
+                  : '➤ Жіберу'}
               </button>
             </div>
           </div>
@@ -308,17 +320,40 @@ export default function ChatWindow() {
           <div className="reply-bar" />
           <div className="reply-content">
             <span className="reply-sender">{replyTo.sender?.name}</span>
-            <span className="reply-text">{replyTo.content || '[Медиа]'}</span>
+            <span className="reply-text">{replyTo.content || '📎 Медиа'}</span>
           </div>
           <button className="btn-icon" onClick={() => setReplyTo(null)}>✕</button>
         </div>
       )}
 
-      {/* ── INPUT TOOLS ── */}
-      <div className="input-tools">
-        <FileUploadInput type="image" onFileSelected={setImageFile} disabled={uploadingMedia || !!imageFile} />
-        <button className="btn btn-secondary btn-sm" onClick={() => setShowAudioRecorder(!showAudioRecorder)} disabled={uploadingMedia}>
-          🎤 Дыбыс
+      {/* ── TOOLBAR ── */}
+      <div className="input-toolbar">
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/jpeg,image/png,image/gif,image/webp"
+          hidden
+          onChange={(e) => {
+            const file = e.target.files?.[0]
+            if (file) setImageFile(file)
+            e.target.value = ''
+          }}
+        />
+        <button
+          className="toolbar-btn"
+          onClick={() => fileInputRef.current?.click()}
+          disabled={uploadingMedia || !!imageFile}
+          title="Сурет жіберу"
+        >
+          📷
+        </button>
+        <button
+          className={`toolbar-btn ${showAudioRecorder ? 'active' : ''}`}
+          onClick={() => setShowAudioRecorder(v => !v)}
+          disabled={uploadingMedia}
+          title="Дыбыс хабарламасы"
+        >
+          🎤
         </button>
       </div>
 
@@ -327,17 +362,28 @@ export default function ChatWindow() {
         <textarea
           ref={inputRef}
           className="chat-textarea"
-          placeholder="Хабарлама жазыңыз... (Enter — жіберу, Shift+Enter — жаңа жол)"
+          placeholder="Хабарлама жазыңыз..."
           value={input}
           onChange={handleInputChange}
           onKeyDown={handleKey}
           rows={1}
-          style={{ height: 'auto' }}
-          onInput={e => { e.target.style.height = 'auto'; e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px' }}
           disabled={uploadingMedia}
+          onInput={e => {
+            e.target.style.height = 'auto'
+            e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px'
+          }}
         />
-        <button className="send-btn" onClick={handleSend} disabled={!input.trim() || sending || uploadingMedia}>
-          {sending || uploadingMedia ? <span className="spinner" style={{width:18,height:18}} /> : '➤'}
+        <button
+          className="send-btn"
+          onClick={handleSend}
+          disabled={!input.trim() || sending || uploadingMedia}
+        >
+          {sending || uploadingMedia
+            ? <span className="spinner" style={{ width: 18, height: 18 }} />
+            : <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+                <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+              </svg>
+          }
         </button>
       </div>
 
@@ -347,59 +393,65 @@ export default function ChatWindow() {
 }
 
 // ── MESSAGE BUBBLE ──
-function MessageBubble({ message, isOwn, showAvatar, onReply, onDelete }) {
-  const [showMenu, setShowMenu] = useState(false)
+function MessageBubble({ message, isOwn, showSenderName, onReply, onDelete }) {
+  const isMedia = message.type === 'IMAGE' || message.type === 'VOICE' || message.type === 'FILE'
+  const isText = !message.type || message.type === 'TEXT'
 
   return (
-    <div className={`msg-wrapper ${isOwn ? 'own' : 'other'}`}
-      onMouseLeave={() => setShowMenu(false)}>
-
-      {!isOwn && showAvatar && (
-        <Avatar user={message.sender} size={30} className="msg-avatar" />
-      )}
-
+    <div className={`msg-wrapper ${isOwn ? 'own' : 'other'}`}>
       <div className="msg-group">
-        {!isOwn && showAvatar && (
-          <span className="msg-sender">{message.sender?.name}</span>
+
+        {showSenderName && (
+          <span className="msg-sender-name">{message.sender?.name}</span>
         )}
 
         {message.replyTo && (
-          <div className="msg-reply">
+          <div className={`msg-reply-block ${isOwn ? 'own' : ''}`}>
             <span className="msg-reply-sender">{message.replyTo.sender?.name}</span>
-            <span className="msg-reply-text">{message.replyTo.content || '[Медиа]'}</span>
+            <span className="msg-reply-text">{message.replyTo.content || '📎 Медиа'}</span>
           </div>
         )}
 
-        {/* МЕДИА КӨРСЕТКІШ */}
-        <MediaViewer message={message} isOwn={isOwn} />
+        {/* МЕДИА ХАБАРЛАМАЛАР */}
+        {isMedia && !message.deleted && (
+          <div className={`msg-media-container ${isOwn ? 'own' : 'other'}`}>
+            <MediaViewer message={message} isOwn={isOwn} />
+            <span className="msg-time-media">{formatMessageTime(message.createdAt)}</span>
+          </div>
+        )}
 
-        {/* МӘТІН ҚАБЫҒЫ */}
-        {message.content && message.type === 'TEXT' && (
+        {/* МӘТІН ХАБАРЛАМАЛАР */}
+        {(isText || message.deleted) && (
           <div className={`msg-bubble ${isOwn ? 'own' : 'other'} ${message.deleted ? 'deleted' : ''}`}>
             {message.deleted
               ? <span className="msg-deleted">🚫 Хабарлама өшірілді</span>
               : <span className="msg-text">{message.content}</span>
             }
-            <span className="msg-time">
-              {formatMessageTime(message.createdAt)}
-              {message.editedAt && ' ✎'}
-            </span>
+            <span className="msg-time">{formatMessageTime(message.createdAt)}</span>
           </div>
         )}
 
-        {/* IMAGE CAPTION ПУЗЫРЬ */}
-        {message.content && message.type === 'IMAGE' && (
-          <div className={`msg-bubble ${isOwn ? 'own' : 'other'}`}>
+        {/* IMAGE + CAPTION */}
+        {message.type === 'IMAGE' && message.content && !message.deleted && (
+          <div className={`msg-bubble ${isOwn ? 'own' : 'other'}`} style={{ marginTop: 4 }}>
             <span className="msg-text">{message.content}</span>
             <span className="msg-time">{formatMessageTime(message.createdAt)}</span>
           </div>
         )}
 
-        {/* Action buttons */}
+        {/* ACTIONS */}
         {!message.deleted && (
-          <div className="msg-actions">
-            {onReply && <button className="msg-action-btn" onClick={onReply} title="Жауап беру">↩</button>}
-            {onDelete && <button className="msg-action-btn danger" onClick={onDelete} title="Өшіру">🗑</button>}
+          <div className={`msg-actions ${isOwn ? 'own' : ''}`}>
+            {onReply && (
+              <button className="msg-action-btn" onClick={onReply} title="Жауап беру">
+                ↩
+              </button>
+            )}
+            {onDelete && (
+              <button className="msg-action-btn danger" onClick={onDelete} title="Өшіру">
+                🗑
+              </button>
+            )}
           </div>
         )}
       </div>
@@ -411,18 +463,23 @@ function MessageBubble({ message, isOwn, showAvatar, onReply, onDelete }) {
 function DateDivider({ date }) {
   const d = new Date(date)
   const today = new Date()
-  const yesterday = new Date(today); yesterday.setDate(today.getDate() - 1)
+  const yesterday = new Date(today)
+  yesterday.setDate(today.getDate() - 1)
 
   let label
   if (sameDay(d, today)) label = 'Бүгін'
   else if (sameDay(d, yesterday)) label = 'Кеше'
-  else label = d.toLocaleDateString('ru-RU', { day:'numeric', month:'long', year:'numeric' })
+  else label = d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })
 
-  return <div className="date-divider"><span>{label}</span></div>
+  return (
+    <div className="date-divider">
+      <span>{label}</span>
+    </div>
+  )
 }
 
 // ── CHAT INFO PANEL ──
-function ChatInfoPanel({ chat, user, onClose }) {
+function ChatInfoPanel({ chat, onClose }) {
   return (
     <div className="info-panel">
       <div className="info-panel-header">
@@ -454,5 +511,7 @@ function roleLabel(role) {
 
 function sameDay(d1, d2) {
   const a = new Date(d1), b = new Date(d2)
-  return a.getFullYear()===b.getFullYear() && a.getMonth()===b.getMonth() && a.getDate()===b.getDate()
+  return a.getFullYear() === b.getFullYear()
+    && a.getMonth() === b.getMonth()
+    && a.getDate() === b.getDate()
 }
