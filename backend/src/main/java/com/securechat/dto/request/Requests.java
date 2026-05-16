@@ -7,13 +7,13 @@ public class Requests {
 
     @Getter @Setter @NoArgsConstructor @AllArgsConstructor
     public static class RegisterRequest {
-        @NotBlank @Size(min=3, max=30)
+        @NotBlank @Size(min = 3, max = 30)
         private String username;
-        @NotBlank @Size(min=1, max=100)
+        @NotBlank @Size(min = 1, max = 100)
         private String name;
         private String email;
         private String phone;
-        @NotBlank @Size(min=6)
+        @NotBlank @Size(min = 6)
         private String password;
         private String bio;
     }
@@ -26,11 +26,11 @@ public class Requests {
 
     @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
     public static class UpdateProfileRequest {
-        @Size(min=1, max=100)
+        @Size(min = 1, max = 100)
         private String name;
-        @Size(max=255)
+        @Size(max = 255)
         private String bio;
-        @Size(min=3, max=30)
+        @Size(min = 3, max = 30)
         private String username;
         private String email;
         private String phone;
@@ -40,7 +40,7 @@ public class Requests {
     @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
     public static class ChangePasswordRequest {
         @NotBlank private String currentPassword;
-        @NotBlank @Size(min=6) private String newPassword;
+        @NotBlank @Size(min = 6) private String newPassword;
     }
 
     @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
@@ -58,9 +58,22 @@ public class Requests {
         private Long replyToId;
     }
 
+    // PIN-код орнату / тексеру — тек цифрлар, 4-6 санды
     @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
     public static class PinRequest {
-        @NotBlank @Size(min=4, max=6) private String pin;
+        @NotBlank
+        @Pattern(regexp = "\\d{4,6}", message = "PIN-код тек 4-6 цифрдан тұруы керек")
+        private String pin;
+    }
+
+    // PIN-кодты ұмытқанда негізгі құпия сөз арқылы қалпына келтіру
+    @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
+    public static class RecoverPinRequest {
+        @NotBlank
+        private String password;   // негізгі аккаунт құпия сөзі
+        @NotBlank
+        @Pattern(regexp = "\\d{4,6}", message = "Жаңа PIN-код тек 4-6 цифрдан тұруы керек")
+        private String newPin;
     }
 
     @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
@@ -77,5 +90,18 @@ public class Requests {
     @Getter @Setter @NoArgsConstructor @AllArgsConstructor
     public static class MarkReadRequest {
         @NotNull private Long messageId;
+    }
+
+    // Хабарламаны өңдеу (edit)
+    @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
+    public static class EditMessageRequest {
+        @NotBlank @Size(min = 1, max = 4000)
+        private String content;
+    }
+
+    // Мүше рөлін өзгерту
+    @Getter @Setter @NoArgsConstructor @AllArgsConstructor
+    public static class ChangeMemberRoleRequest {
+        @NotBlank private String role;  // "ADMIN" немесе "MEMBER"
     }
 }

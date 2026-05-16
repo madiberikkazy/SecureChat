@@ -9,11 +9,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import com.securechat.dto.request.Requests.*;
-import com.securechat.dto.request.Requests.SendMessageRequest;
 import com.securechat.dto.response.Responses.*;
-import com.securechat.dto.response.Responses.MessageDto;
-import com.securechat.dto.response.Responses.TypingDto;
-import com.securechat.dto.response.Responses.WebSocketMessageDto;
 import com.securechat.entity.Chat;
 import com.securechat.entity.Message;
 import com.securechat.entity.User;
@@ -36,7 +32,7 @@ public class MessageService {
     private final MapperService mapper;
     private final FileService fileService;
 
-    // ===== ХАБАРЛАМА ЖІБЕРУ =====
+    // ===== МӘТІН ХАБАРЛАМАСЫ ЖІБЕРУ =====
     @Transactional
     public MessageDto sendMessage(SendMessageRequest req, User sender) {
         Chat chat = chatRepo.findById(req.getChatId())
@@ -46,7 +42,7 @@ public class MessageService {
             throw new RuntimeException("Сіз бұл чатта мүше емессіз");
 
         if (req.getContent() == null || req.getContent().isBlank())
-            throw new RuntimeException("Хабарлама бос болмауы тііс");
+            throw new RuntimeException("Хабарлама бос болмауы тиіс");
 
         Message replyTo = null;
         if (req.getReplyToId() != null)
@@ -61,19 +57,41 @@ public class MessageService {
                 .build();
 
         messageRepo.save(message);
-
         chat.setLastMessageAt(LocalDateTime.now());
         chatRepo.save(chat);
 
         MessageDto dto = mapper.toMessageDto(message);
         broadcast(chat.getId(), "NEW_MESSAGE", dto);
+        return dto;
+    }
 
+    // ===== ХАБАРЛАМАНЫ ӨҢДЕУ (тек мәтін) =====
+    @Transactional
+    public MessageDto editMessage(Long messageId, String newContent, User user) {
+        Message msg = messageRepo.findById(messageId)
+                .orElseThrow(() -> new RuntimeException("Хабарлама табылмады"));
+
+        if (!msg.getSender().getId().equals(user.getId()))
+            throw new RuntimeException("Тек өз хабарламаңызды өңдей аласыз");
+
+        if (msg.isDeleted())
+            throw new RuntimeException("Өшірілген хабарламаны өңдеу мүмкін емес");
+
+        if (msg.getType() != Message.MessageType.TEXT)
+            throw new RuntimeException("Тек мәтіндік хабарламаны өңдеуге болады");
+
+        msg.setContent(newContent.trim());
+        msg.setEditedAt(LocalDateTime.now());
+        messageRepo.save(msg);
+
+        MessageDto dto = mapper.toMessageDto(msg);
+        broadcast(msg.getChat().getId(), "EDIT_MESSAGE", dto);
         return dto;
     }
 
     // ===== СУРЕТ ХАБАРЛАМАСЫ ЖІБЕРУ =====
     @Transactional
-    public MessageDto sendImageMessage(Long chatId, String content, MultipartFile imageFile, 
+    public MessageDto sendImageMessage(Long chatId, String content, MultipartFile imageFile,
                                        Long replyToId, User sender) throws IOException {
         Chat chat = chatRepo.findById(chatId)
                 .orElseThrow(() -> new RuntimeException("Чат табылмады"));
@@ -82,7 +100,6 @@ public class MessageService {
             throw new RuntimeException("Сіз бұл чатта мүше емессіз");
 
         String fileUrl = fileService.uploadImage(imageFile, chatId, sender.getId());
-
         Message replyTo = replyToId != null ? messageRepo.findById(replyToId).orElse(null) : null;
 
         Message message = Message.builder()
@@ -95,19 +112,17 @@ public class MessageService {
                 .build();
 
         messageRepo.save(message);
-
         chat.setLastMessageAt(LocalDateTime.now());
         chatRepo.save(chat);
 
         MessageDto dto = mapper.toMessageDto(message);
         broadcast(chat.getId(), "NEW_MESSAGE", dto);
-
         return dto;
     }
 
     // ===== ДЫБЫС ХАБАРЛАМАСЫ ЖІБЕРУ =====
     @Transactional
-    public MessageDto sendVoiceMessage(Long chatId, MultipartFile voiceFile, 
+    public MessageDto sendVoiceMessage(Long chatId, MultipartFile voiceFile,
                                       Long replyToId, User sender) throws IOException {
         Chat chat = chatRepo.findById(chatId)
                 .orElseThrow(() -> new RuntimeException("Чат табылмады"));
@@ -116,7 +131,6 @@ public class MessageService {
             throw new RuntimeException("Сіз бұл чатта мүше емессіз");
 
         String fileUrl = fileService.uploadVoiceMessage(voiceFile, chatId, sender.getId());
-
         Message replyTo = replyToId != null ? messageRepo.findById(replyToId).orElse(null) : null;
 
         Message message = Message.builder()
@@ -128,19 +142,17 @@ public class MessageService {
                 .build();
 
         messageRepo.save(message);
-
         chat.setLastMessageAt(LocalDateTime.now());
         chatRepo.save(chat);
 
         MessageDto dto = mapper.toMessageDto(message);
         broadcast(chat.getId(), "NEW_MESSAGE", dto);
-
         return dto;
     }
 
     // ===== ФАЙЛ ХАБАРЛАМАСЫ ЖІБЕРУ =====
     @Transactional
-    public MessageDto sendFileMessage(Long chatId, String fileName, MultipartFile file, 
+    public MessageDto sendFileMessage(Long chatId, String fileName, MultipartFile file,
                                      Long replyToId, User sender) throws IOException {
         Chat chat = chatRepo.findById(chatId)
                 .orElseThrow(() -> new RuntimeException("Чат табылмады"));
@@ -149,7 +161,6 @@ public class MessageService {
             throw new RuntimeException("Сіз бұл чатта мүше емессіз");
 
         String fileUrl = fileService.uploadFile(file, chatId, sender.getId());
-
         Message replyTo = replyToId != null ? messageRepo.findById(replyToId).orElse(null) : null;
 
         Message message = Message.builder()
@@ -162,13 +173,11 @@ public class MessageService {
                 .build();
 
         messageRepo.save(message);
-
         chat.setLastMessageAt(LocalDateTime.now());
         chatRepo.save(chat);
 
         MessageDto dto = mapper.toMessageDto(message);
         broadcast(chat.getId(), "NEW_MESSAGE", dto);
-
         return dto;
     }
 
@@ -181,9 +190,8 @@ public class MessageService {
         if (!msg.getSender().getId().equals(user.getId()))
             throw new RuntimeException("Тек өз хабарламаңызды өшіре аласыз");
 
-        if (msg.getFileUrl() != null) {
+        if (msg.getFileUrl() != null)
             fileService.deleteFile(msg.getFileUrl());
-        }
 
         msg.setDeleted(true);
         msg.setDeletedAt(LocalDateTime.now().toString());
@@ -203,7 +211,7 @@ public class MessageService {
         broadcast(chatId, "TYPING", typingDto);
     }
 
-    // ===== ХАБАРЛАМА ОҚЫЛДЫ =====
+    // ===== ХАБАРЛАМА ОҚЫЛДЫ (WebSocket хабарлама) =====
     public void sendReadReceipt(Long chatId, Long messageId, User user) {
         var readDto = java.util.Map.of(
                 "chatId", chatId,
@@ -214,7 +222,7 @@ public class MessageService {
         broadcast(chatId, "READ", readDto);
     }
 
-    // ===== Хабарламаны барлық мүшелерге тарату =====
+    // ===== Broadcast =====
     private void broadcast(Long chatId, String event, Object data) {
         var wsMsg = WebSocketMessageDto.builder()
                 .event(event)

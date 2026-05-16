@@ -690,3 +690,74 @@
     box-shadow: var(--shadow);
   }
 }
+
+/* ── READ TICK ── */
+.msg-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: 6px;
+}
+
+.msg-read-tick {
+  font-size: 11px;
+  color: var(--text-muted);
+  letter-spacing: -1px;
+}
+
+.msg-read-tick.read {
+  color: var(--color-accent, #4fc3f7);
+}
+
+.msg-edited {
+  font-size: 10px;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+/* ── INFO PANEL ACTIONS ── */
+.info-panel-actions {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.btn-danger {
+  background: var(--color-error, #e53935);
+  color: #fff;
+  border: none;
+}
+
+.btn-danger:hover {
+  background: #c62828;
+}
+
+.btn-xs {
+  padding: 2px 8px;
+  font-size: 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: transparent;
+  cursor: pointer;
+  color: var(--text-secondary);
+}
+
+.btn-xs:hover {
+  background: var(--bg-hover);
+}
+
+/* ── PIN RECOVER ── */
+.pin-recover-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  margin-bottom: 12px;
+}
+
+.pin-recover-fields .input {
+  width: 100%;
+}

@@ -9,11 +9,9 @@ export function useChatWebSocket(chatId) {
   const setTyping     = useChatStore(s => s.setTyping)
   const typingTimers  = useRef({})
 
-  // Аутентифицирленген пайдаланушыны алу
   const currentUser = (() => {
-    try {
-      return JSON.parse(localStorage.getItem('user') || '{}')
-    } catch { return {} }
+    try { return JSON.parse(localStorage.getItem('user') || '{}') }
+    catch { return {} }
   })()
 
   useEffect(() => {
@@ -23,31 +21,33 @@ export function useChatWebSocket(chatId) {
       const { event, data } = wsMsg
 
       switch (event) {
+
         case 'NEW_MESSAGE': {
           addMessage(chatId, data)
 
-          // Хабарлама өзімнің хабарламам емес болса — дыбыс + хабарландыру
           const isOwn = data.sender?.id === currentUser?.id
           if (!isOwn) {
             const senderName = data.sender?.name || data.sender?.username || 'Белгісіз'
-            const text       = data.deleted
+            const text = data.deleted
               ? '🚫 Хабарлама өшірілді'
-              : data.type === 'IMAGE'  ? '📷 Сурет'
-              : data.type === 'VOICE'  ? '🎤 Дыбыс хабарламасы'
-              : data.type === 'FILE'   ? '📎 Файл'
+              : data.type === 'IMAGE' ? '📷 Сурет'
+              : data.type === 'VOICE' ? '🎤 Дыбыс хабарламасы'
+              : data.type === 'FILE'  ? '📎 Файл'
               : (data.content || '')
 
             notificationService.onNewMessage(
-              senderName,
-              text,
-              data.sender?.avatarUrl,
-              false
+              senderName, text, data.sender?.avatarUrl, false
             )
           }
           break
         }
 
         case 'DELETE_MESSAGE':
+          updateMessage(chatId, data)
+          break
+
+        // Хабарламаны өңдеу — store жаңарту
+        case 'EDIT_MESSAGE':
           updateMessage(chatId, data)
           break
 
@@ -65,6 +65,10 @@ export function useChatWebSocket(chatId) {
           break
 
         case 'READ':
+          // оқылды белгісі — қажет болса жаңарту
+          break
+
+        default:
           break
       }
     })

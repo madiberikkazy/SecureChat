@@ -24,6 +24,15 @@ const useChatStore = create(
         return { chats: [chat, ...state.chats] }
       }),
 
+      // Чатты толығымен жою (delete немесе leave)
+      removeChat: (chatId) => set(state => ({
+        chats: state.chats.filter(c => c.id !== chatId),
+        selectedChatId: state.selectedChatId === chatId ? null : state.selectedChatId,
+        messages: Object.fromEntries(
+          Object.entries(state.messages).filter(([k]) => Number(k) !== chatId)
+        ),
+      })),
+
       selectChat: (id) => set({ selectedChatId: id }),
 
       getSelectedChat: () => {
@@ -60,16 +69,17 @@ const useChatStore = create(
 
         return {
           messages: { ...state.messages, [chatId]: updated },
-          chats: updatedChats
+          chats: updatedChats,
         }
       }),
 
+      // Хабарламаны жаңарту (өңдеу / оқылды)
       updateMessage: (chatId, message) => set(state => ({
         messages: {
           ...state.messages,
           [chatId]: (state.messages[chatId] || []).map(m =>
             m.id === message.id ? message : m
-          )
+          ),
         }
       })),
 
@@ -88,14 +98,14 @@ const useChatStore = create(
 
       isOnline: (username) => get().onlineUsers[username] ?? false,
 
-      // ===== ЖАСЫРЫН ЧАТ (сессиядан тыс сақталмайды — қауіпсіздік) =====
+      // ===== ЖАСЫРЫН ЧАТ =====
       unlockChat: (chatId) => set(state => ({
         unlockedChats: new Set([...state.unlockedChats, chatId])
       })),
 
       isChatUnlocked: (chatId) => get().unlockedChats.has(chatId),
 
-      // ===== ОҚЫЛМАҒАН САНДЫ АЗАЙТУ =====
+      // ===== ОҚЫЛМАҒАН САНДЫ ТАЗАЛАУ =====
       clearUnread: (chatId) => set(state => ({
         chats: state.chats.map(c =>
           c.id === chatId ? { ...c, unreadCount: 0 } : c
@@ -104,9 +114,6 @@ const useChatStore = create(
     }),
     {
       name: 'securechat-store',
-      // Тек chats және selectedChatId сақтаймыз
-      // messages, typing, online — серверден жүктеледі
-      // unlockedChats — қауіпсіздік үшін сақталмайды (PIN қайта сұралады)
       partialize: (state) => ({
         chats: state.chats,
         selectedChatId: state.selectedChatId,
