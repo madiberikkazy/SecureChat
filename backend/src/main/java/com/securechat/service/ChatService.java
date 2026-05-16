@@ -49,7 +49,6 @@ public class ChatService {
                     try {
                         return buildChatDto(chat, user);
                     } catch (Exception e) {
-                        // Бір чаттың қатесі барлық тізімді бұзбасын
                         return null;
                     }
                 })
@@ -65,13 +64,12 @@ public class ChatService {
         return buildChatDto(chat, user);
     }
 
-    // ===== ЧАТТЫҢ ХАБАРЛАМАЛАРЫН АЛУ =====
+    // ===== ЧАТТЫҢ ХАБАРЛАМАЛАРЫН АЛУ (read статусымен) =====
     public List<MessageDto> getMessages(Long chatId, User user) {
         assertMember(chatId, user.getId());
-        // Жасырын чат тексеруі — фронтенд жағынан басқарылады (PinModal)
         return messageRepo.findByChatIdOrderByCreatedAtAsc(chatId)
                 .stream()
-                .map(mapper::toMessageDto)
+                .map(msg -> mapper.toMessageDto(msg, user.getId()))
                 .collect(Collectors.toList());
     }
 
@@ -138,7 +136,7 @@ public class ChatService {
         return buildChatDto(chatRepo.findById(chatId).get(), requester);
     }
 
-    // ===== ТОПТАН МҮШЕНІ ӘКЕТ =====
+    // ===== ТОПТАН МҮШЕНІ ШЫҒАРУ =====
     @Transactional
     public void removeMemberFromGroup(Long chatId, Long userId, User requester) {
         ChatMember reqMember = memberRepo.findByChatIdAndUserId(chatId, requester.getId())
@@ -176,13 +174,28 @@ public class ChatService {
         return buildChatDto(chat, requester);
     }
 
+    // ===== ЧАТТЫ ЖОЮ (тек Owner) =====
+    @Transactional
+    public void deleteChat(Long chatId, User requester) {
+        Chat chat = chatRepo.findById(chatId)
+                .orElseThrow(() -> new RuntimeException("Чат табылмады"));
+
+        ChatMember member = memberRepo.findByChatIdAndUserId(chatId, requester.getId())
+                .orElseThrow(() -> new RuntimeException("Рұқсат жоқ"));
+
+        if (member.getRole() != ChatMember.Role.OWNER)
+            throw new RuntimeException("Тек топ иесі жоя алады");
+
+        chatRepo.delete(chat);
+    }
+
     // ===== ЖАСЫРЫН ЧАТ PIN ОРНАТУ =====
     @Transactional
     public void setPin(Long chatId, String pin, User user) {
         assertMember(chatId, user.getId());
-        if (pin == null || pin.length() < 4) {
-            throw new RuntimeException("PIN-код кемінде 4 цифр болуы керек");
-        }
+        if (pin == null || !pin.matches("\\d{4,6}"))
+            throw new RuntimeException("PIN-код тек 4-6 цифрдан тұруы керек");
+
         Chat chat = chatRepo.findById(chatId)
                 .orElseThrow(() -> new RuntimeException("Чат табылмады"));
 
@@ -205,11 +218,68 @@ public class ChatService {
                 .orElseThrow(() -> new RuntimeException("Жасырын чат табылмады"));
     }
 
+    // ===== PIN-КОДТЫ НЕГІЗГІ ҚҰПИЯ СӨЗ АРҚЫЛЫ ҚАЛПЫНА КЕЛТІРУ =====
+    @Transactional
+    public void recoverPin(Long chatId, String password, String newPin, User user) {
+        assertMember(chatId, user.getId());
+
+        if (!encoder.matches(password, user.getPasswordHash()))
+            throw new RuntimeException("Негізгі құпия сөз дұрыс емес");
+
+        if (newPin == null || !newPin.matches("\\d{4,6}"))
+            throw new RuntimeException("Жаңа PIN-код тек 4-6 цифрдан тұруы керек");
+
+        Chat chat = chatRepo.findById(chatId)
+                .orElseThrow(() -> new RuntimeException("Чат табылмады"));
+
+        Optional<HiddenChat> existing = hiddenRepo.findByChatIdAndUserId(chatId, user.getId());
+        if (existing.isPresent()) {
+            existing.get().setPinHash(encoder.encode(newPin));
+            hiddenRepo.save(existing.get());
+        } else {
+            hiddenRepo.save(HiddenChat.builder()
+                    .chat(chat).user(user)
+                    .pinHash(encoder.encode(newPin))
+                    .build());
+        }
+    }
+
     // ===== ЖАСЫРЫН РЕЖИМДІ АЛЫП ТАСТАУ =====
     @Transactional
     public void removePin(Long chatId, User user) {
         assertMember(chatId, user.getId());
         hiddenRepo.deleteByChatIdAndUserId(chatId, user.getId());
+    }
+
+    // ===== МҮШЕ РӨЛІН ӨЗГЕРТУ (тек Owner) =====
+    @Transactional
+    public ChatDto changeMemberRole(Long chatId, Long targetUserId, String newRole, User requester) {
+        ChatMember reqMember = memberRepo.findByChatIdAndUserId(chatId, requester.getId())
+                .orElseThrow(() -> new RuntimeException("Рұқсат жоқ"));
+
+        if (reqMember.getRole() != ChatMember.Role.OWNER)
+            throw new RuntimeException("Тек топ иесі рөлдерді өзгерте алады");
+
+        ChatMember.Role role;
+        try {
+            role = ChatMember.Role.valueOf(newRole.toUpperCase());
+        } catch (IllegalArgumentException e) {
+            throw new RuntimeException("Жарамсыз рөл: " + newRole);
+        }
+
+        if (role == ChatMember.Role.OWNER)
+            throw new RuntimeException("Owner рөлін тағайындауға болмайды");
+
+        ChatMember target = memberRepo.findByChatIdAndUserId(chatId, targetUserId)
+                .orElseThrow(() -> new RuntimeException("Мүше табылмады"));
+
+        if (!target.isActive())
+            throw new RuntimeException("Мүше топта белсенді емес");
+
+        target.setRole(role);
+        memberRepo.save(target);
+
+        return buildChatDto(chatRepo.findById(chatId).get(), requester);
     }
 
     // ===== ХАБАРЛАМА ОҚЫЛДЫ =====
@@ -226,7 +296,7 @@ public class ChatService {
         });
     }
 
-    // ===== ChatDto ЖАСАУ — null-safe =====
+    // ===== ChatDto ЖАСАУ =====
     private ChatDto buildChatDto(Chat chat, User currentUser) {
         List<ChatMember> members = memberRepo.findByChatIdAndActiveTrue(chat.getId());
 
@@ -234,7 +304,6 @@ public class ChatService {
                 messageRepo.findByChatIdOrderByCreatedAtDesc(chat.getId(), PageRequest.of(0, 1));
         MessageDto lastMsg = lastMsgs.isEmpty() ? null : mapper.toMessageDto(lastMsgs.get(0));
 
-        // null-safe fallback: егер createdAt null болса, ескі дата қолдан
         LocalDateTime fallbackDate = LocalDateTime.of(2020, 1, 1, 0, 0);
         LocalDateTime userCreatedAt = currentUser.getCreatedAt() != null
                 ? currentUser.getCreatedAt()
@@ -246,9 +315,7 @@ public class ChatService {
                     .findLastReadTime(chat.getId(), currentUser.getId())
                     .orElse(userCreatedAt);
             unread = messageRepo.countUnread(chat.getId(), currentUser.getId(), lastRead);
-        } catch (Exception ignored) {
-            // Оқылмаған санын алу мүмкін болмаса, 0 қайтарамыз
-        }
+        } catch (Exception ignored) {}
 
         boolean hidden = hiddenRepo.existsByChatIdAndUserId(chat.getId(), currentUser.getId());
 

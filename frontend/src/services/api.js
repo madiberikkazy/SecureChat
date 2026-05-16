@@ -35,25 +35,29 @@ export const userAPI = {
 }
 
 export const chatAPI = {
-  getAll:       ()     => api.get('/chats'),
-  getOne:       id     => api.get(`/chats/${id}`),
-  create:       d      => api.post('/chats', d),
-  update:       (id,d) => api.patch(`/chats/${id}`, d),
-  getMessages:  id     => api.get(`/chats/${id}/messages`),
-  addMember:    (id,d) => api.post(`/chats/${id}/members`, d),
-  removeMember: (id,uid) => api.delete(`/chats/${id}/members/${uid}`),
-  setPin:       (id,d) => api.post(`/chats/${id}/pin`, d),
-  verifyPin:    (id,d) => api.post(`/chats/${id}/verify-pin`, d),
-  removePin:    id     => api.delete(`/chats/${id}/pin`),
-  markRead:     (id,d) => api.post(`/chats/${id}/read`, d),
+  getAll:           ()           => api.get('/chats'),
+  getOne:           id           => api.get(`/chats/${id}`),
+  create:           d            => api.post('/chats', d),
+  update:           (id, d)      => api.patch(`/chats/${id}`, d),
+  delete:           id           => api.delete(`/chats/${id}`),
+  getMessages:      id           => api.get(`/chats/${id}/messages`),
+  addMember:        (id, d)      => api.post(`/chats/${id}/members`, d),
+  removeMember:     (id, uid)    => api.delete(`/chats/${id}/members/${uid}`),
+  changeMemberRole: (id, uid, d) => api.patch(`/chats/${id}/members/${uid}/role`, d),
+  setPin:           (id, pin)    => api.post(`/chats/${id}/pin`, { pin }),
+  verifyPin:        (id, pin)    => api.post(`/chats/${id}/verify-pin`, { pin }),
+  recoverPin:       (id, d)      => api.post(`/chats/${id}/pin/recover`, d),
+  removePin:        id           => api.delete(`/chats/${id}/pin`),
+  markRead:         (id, d)      => api.post(`/chats/${id}/read`, d),
 }
 
 export const messageAPI = {
-  send:        d  => api.post('/messages', d),
-  sendImage:   (form) => api.post('/messages/image', form, { headers: { 'Content-Type': 'multipart/form-data' } }),
-  sendVoice:   (form) => api.post('/messages/voice', form, { headers: { 'Content-Type': 'multipart/form-data' } }),
-  sendFile:    (form) => api.post('/messages/file', form, { headers: { 'Content-Type': 'multipart/form-data' } }),
-  delete:      id => api.delete(`/messages/${id}`),
+  send:      d        => api.post('/messages', d),
+  edit:      (id, d)  => api.patch(`/messages/${id}`, d),
+  sendImage: form     => api.post('/messages/image', form, { headers: { 'Content-Type': 'multipart/form-data' } }),
+  sendVoice: form     => api.post('/messages/voice', form, { headers: { 'Content-Type': 'multipart/form-data' } }),
+  sendFile:  form     => api.post('/messages/file',  form, { headers: { 'Content-Type': 'multipart/form-data' } }),
+  delete:    id       => api.delete(`/messages/${id}`),
 }
 
 export default api
