@@ -28,6 +28,9 @@ public class UserService {
     @Value("${app.upload.dir:uploads/}")
     private String uploadDir;
 
+    @Value("${app.base-url:http://localhost:8080}")
+    private String baseUrl;
+
     // ===== ПРОФИЛЬ АЛУ =====
     public UserDto getProfile(User user) {
         return mapper.toUserDto(user);
@@ -117,7 +120,7 @@ public class UserService {
         Files.copy(file.getInputStream(), avatarDir.resolve(filename),
                 StandardCopyOption.REPLACE_EXISTING);
 
-        user.setAvatarUrl("/uploads/avatars/" + filename);
+        user.setAvatarUrl(baseUrl + "/uploads/avatars/" + filename);
         userRepo.save(user);
         return mapper.toUserDto(user);
     }
