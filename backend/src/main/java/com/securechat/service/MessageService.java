@@ -33,6 +33,7 @@ public class MessageService {
     private final SimpMessagingTemplate ws;
     private final MapperService mapper;
     private final FileService fileService;
+    private final EncryptionService enc;
 
     // ===== МӘТІН ХАБАРЛАМАСЫ ЖІБЕРУ =====
     @Transactional
@@ -53,7 +54,7 @@ public class MessageService {
         Message message = Message.builder()
                 .chat(chat)
                 .sender(sender)
-                .content(req.getContent().trim())
+                .content(enc.encrypt(req.getContent().trim()))  // 🔐 шифрлап сақтаймыз
                 .type(Message.MessageType.TEXT)
                 .replyTo(replyTo)
                 .build();
@@ -82,7 +83,7 @@ public class MessageService {
         if (msg.getType() != Message.MessageType.TEXT)
             throw new RuntimeException("Тек мәтіндік хабарламаны өңдеуге болады");
 
-        msg.setContent(newContent.trim());
+        msg.setContent(enc.encrypt(newContent.trim()));  // 🔐 шифрлап сақтаймыз
         msg.setEditedAt(LocalDateTime.now());
         messageRepo.save(msg);
 
@@ -145,7 +146,7 @@ public class MessageService {
             Message forwarded = Message.builder()
                     .chat(targetChat)
                     .sender(sender)
-                    .content(original.getContent())
+                    .content(original.getContent())  // DB-де шифрланған — тікелей көшіреміз
                     .type(original.getType())
                     .fileUrl(original.getFileUrl())
                     .forwardedFrom(original)
@@ -179,7 +180,7 @@ public class MessageService {
         Message message = Message.builder()
                 .chat(chat)
                 .sender(sender)
-                .content(content != null && !content.isBlank() ? content : null)
+                .content(content != null && !content.isBlank() ? enc.encrypt(content) : null)  // 🔐
                 .type(Message.MessageType.IMAGE)
                 .fileUrl(fileUrl)
                 .replyTo(replyTo)
@@ -240,7 +241,7 @@ public class MessageService {
         Message message = Message.builder()
                 .chat(chat)
                 .sender(sender)
-                .content(fileName != null && !fileName.isBlank() ? fileName : "Файл")
+                .content(enc.encrypt(fileName != null && !fileName.isBlank() ? fileName : "Файл"))  // 🔐
                 .type(Message.MessageType.FILE)
                 .fileUrl(fileUrl)
                 .replyTo(replyTo)

@@ -89,13 +89,40 @@ export function RegisterForm() {
 
   const set = k => e => { setF(p => ({ ...p, [k]: e.target.value })); setError('') }
 
-  const nextStep = e => {
+  const nextStep = async e => {
     e.preventDefault()
-    if (!f.username.trim()) { setError('Никнейм енгізіңіз'); return }
-    if (f.username.length < 3) { setError('Никнейм кемінде 3 символ болуы керек'); return }
+    const username = f.username.trim().toLowerCase()
+
+    // Жергілікті тексеру
+    if (!username) { setError('Никнейм енгізіңіз'); return }
+    if (username.length < 3) { setError('Никнейм кемінде 3 символ болуы керек'); return }
+    if (username.length > 30) { setError('Никнейм 30 символдан аспауы керек'); return }
+    if (!/^[a-z0-9_.−]+$/.test(username)) {
+      setError('Никнейм тек латын әріптерін (a-z), сандарды, _ және . қамтуы мүмкін')
+      return
+    }
     if (!f.name.trim()) { setError('Атыңызды енгізіңіз'); return }
-    setError('')
-    setStep(2)
+
+    // Серверден никнейм бос па екенін тексеру
+    setLoading(true)
+    try {
+      const res = await authAPI.checkUsername(username)
+      const { available, taken } = res.data
+      if (taken) {
+        setError(`@${username} никнеймі бұрыннан алынған. Басқа никнейм таңдаңыз.`)
+        return
+      }
+      if (!available) {
+        setError('Никнейм форматы дұрыс емес')
+        return
+      }
+      setError('')
+      setStep(2)
+    } catch {
+      setError('Тексеру мүмкін болмады. Қайталап көріңіз.')
+    } finally {
+      setLoading(false)
+    }
   }
 
   const submit = async e => {
@@ -166,8 +193,8 @@ export function RegisterForm() {
 
             {error && <div className="auth-error">{error}</div>}
 
-            <button className="btn btn-primary btn-full btn-lg" type="submit">
-              Келесі →
+            <button className="btn btn-primary btn-full btn-lg" type="submit" disabled={loading}>
+              {loading ? <><span className="spinner" /> Тексерілуде...</> : 'Келесі →'}
             </button>
           </form>
         )}

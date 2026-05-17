@@ -154,4 +154,13 @@ public class ChatController extends BaseController {
         chatService.markAsRead(id, req.getMessageId(), currentUser(ud));
         return ResponseEntity.ok(Map.of("message", "OK"));
     }
+
+    // DELETE /api/chats/{id}/messages — чатты тазарту (clear chat)
+    @DeleteMapping("/{id}/messages")
+    public ResponseEntity<Map<String, String>> clearChat(@PathVariable Long id,
+                                                         @AuthenticationPrincipal UserDetails ud) {
+        chatService.clearChat(id, currentUser(ud));
+        return ResponseEntity.ok(Map.of("message", "Чат тазартылды"));
+    }
+
 }

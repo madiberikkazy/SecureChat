@@ -1,25 +1,78 @@
-import { format, isToday, isYesterday, formatDistanceToNow } from 'date-fns'
+import { formatDistanceToNow } from 'date-fns'
 import { kk } from 'date-fns/locale'
 
+// localStorage-дан timezone оқу (Settings-те сақталған)
+function getTz() {
+  return localStorage.getItem('timezone') || Intl.DateTimeFormat().resolvedOptions().timeZone
+}
+
+function get12h() {
+  return localStorage.getItem('timeFormat') === '12h'
+}
+
+/**
+ * Backend LocalDateTime жібереді — timezone белгісізсіз ("2026-05-16T05:31:00").
+ * Browser оны LOCAL уақыт деп қабылдайды, бірақ backend UTC-да жұмыс жасайды.
+ * Шешім: соңына "Z" қосып UTC деп белгілейміз → browser дұрыс конвертациялайды.
+ */
+function parseUTC(dateStr) {
+  if (!dateStr) return null
+  // Егер timezone бар болса — өзгертпейміз
+  if (dateStr.endsWith('Z') || dateStr.includes('+') || dateStr.includes('-', 10)) {
+    return new Date(dateStr)
+  }
+  // Timezone жоқ → UTC деп белгілеу
+  return new Date(dateStr + 'Z')
+}
+
+// Уақытты settings timezone-ына сай форматтау
+function toTzTime(date) {
+  if (!date || isNaN(date)) return ''
+  return date.toLocaleTimeString('ru-RU', {
+    timeZone: getTz(),
+    hour:   '2-digit',
+    minute: '2-digit',
+    hour12: get12h(),
+  })
+}
+
+// Берілген датаның YYYY-MM-DD күнін settings timezone-ында қайтарады
+function toTzDateStr(date) {
+  return date.toLocaleDateString('en-CA', { timeZone: getTz() }) // 'YYYY-MM-DD'
+}
+
 export function formatMessageTime(dateStr) {
-  if (!dateStr) return ''
-  const date = new Date(dateStr)
-  return format(date, 'HH:mm')
+  const date = parseUTC(dateStr)
+  if (!date) return ''
+  return toTzTime(date)
 }
 
 export function formatChatTime(dateStr) {
-  if (!dateStr) return ''
-  const date = new Date(dateStr)
-  if (isToday(date)) return format(date, 'HH:mm')
-  if (isYesterday(date)) return 'Кеше'
-  return format(date, 'dd.MM.yy')
+  const date = parseUTC(dateStr)
+  if (!date) return ''
+
+  const dateDayStr    = toTzDateStr(date)
+  const todayDayStr   = toTzDateStr(new Date())
+  const yestDate      = new Date(Date.now() - 86400000)
+  const yesterDayStr  = toTzDateStr(yestDate)
+
+  if (dateDayStr === todayDayStr)   return toTzTime(date)
+  if (dateDayStr === yesterDayStr)  return 'Кеше'
+  return date.toLocaleDateString('ru-RU', {
+    day: '2-digit', month: '2-digit', year: '2-digit', timeZone: getTz()
+  })
 }
 
 export function formatLastSeen(dateStr, isOnline) {
   if (isOnline) return 'онлайн'
-  if (!dateStr) return ''
-  const date = new Date(dateStr)
-  if (isToday(date)) return `соңғы рет ${format(date, 'HH:mm')}`
+  const date = parseUTC(dateStr)
+  if (!date) return ''
+
+  const dateDayStr  = toTzDateStr(date)
+  const todayDayStr = toTzDateStr(new Date())
+
+  if (dateDayStr === todayDayStr)
+    return `соңғы рет ${toTzTime(date)}`
   return `соңғы рет ${formatDistanceToNow(date, { locale: kk, addSuffix: true })}`
 }
 

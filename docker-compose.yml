@@ -37,6 +37,9 @@ services:
       JWT_EXPIRATION: 604800000
       APP_UPLOAD_DIR: /app/uploads/
       SERVER_PORT: 8080
+      # 🔐 AES-256 шифрлау кілті (32 байт Base64)
+      # Продакшнда: openssl rand -base64 32 арқылы жасап, осы мәнді ауыстырыңыз
+      ENCRYPTION_KEY: zwxhrSx9PqGjOB/57Ivg9jKjElJAcJBxIXJERcUokkQ=
     ports:
       - "8080:8080"
     depends_on:

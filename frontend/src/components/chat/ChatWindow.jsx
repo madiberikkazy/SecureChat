@@ -18,7 +18,7 @@ export default function ChatWindow() {
   const { t } = useLang()
   const {
     selectedChatId, chats, messages, setMessages, addMessage, updateMessage,
-    typingUsers, isChatUnlocked, unlockChat, clearUnread, upsertChat, removeChat,
+    typingUsers, isChatUnlocked, unlockChat, clearUnread, upsertChat, removeChat, removeMessage,
   } = useChatStore()
   const toast = useToast()
 
@@ -32,6 +32,7 @@ export default function ChatWindow() {
   const [showPin,        setShowPin]        = useState(false)
   const [pinMode,        setPinMode]        = useState('verify')
   const [showInfo,       setShowInfo]       = useState(false)
+  const [showUserInfo,   setShowUserInfo]   = useState(false) // Header басқанда ашылатын User Info беті
   const [replyTo,        setReplyTo]        = useState(null)
   const [editingMsg,     setEditingMsg]     = useState(null)
   const [showAudioRec,   setShowAudioRec]   = useState(false)
@@ -69,12 +70,13 @@ export default function ChatWindow() {
     return () => window.removeEventListener('openPinRecover', handler)
   }, [selectedChatId])
 
-  // Reset selection when chat changes
+  // Reset when chat changes
   useEffect(() => {
     setSelectionMode(false)
     setSelectedMsgs(new Set())
     setPinnedMessages([])
     setPinnedIndex(0)
+    setShowUserInfo(false)
   }, [selectedChatId])
 
   // ===== ХАБАРЛАМАЛАРДЫ ЖҮКТЕУ =====
@@ -124,13 +126,13 @@ export default function ChatWindow() {
 
     setSending(true)
     try {
-      const sent = wsService.sendMessage(selectedChatId, content, replyTo?.id)
-      if (!sent) {
-        const res = await messageAPI.send({ chatId: selectedChatId, content, replyToId: replyTo?.id })
-        addMessage(selectedChatId, res.data)
-      }
-    } catch {
-      toast.error(t('failSend'))
+      // REST API арқылы жіберу — сенімді, шифрлауды дұрыс өңдейді
+      // Backend өзі WebSocket арқылы барлық мүшелерге broadcast жасайды
+      const res = await messageAPI.send({ chatId: selectedChatId, content, replyToId: replyTo?.id })
+      addMessage(selectedChatId, res.data)
+    } catch (err) {
+      const msg = err?.response?.data?.error || err?.message || t('failSend')
+      toast.error(msg)
       setInput(content)
     } finally { setSending(false) }
   }, [input, selectedChatId, replyTo, sending])
@@ -358,7 +360,12 @@ export default function ChatWindow() {
       {/* ── HEADER ── */}
       {!selectionMode && (
         <div className="chat-header">
-          <div className="chat-header-info">
+          <div
+            className="chat-header-info clickable"
+            onClick={() => { setShowUserInfo(v => !v); setShowInfo(false) }}
+            title="Пайдаланушы ақпараты"
+            style={{ cursor: 'pointer' }}
+          >
             <div className="chat-avatar-wrap">
               {chat.avatarUrl || otherUser?.avatarUrl
                 ? <img src={chat.avatarUrl || otherUser?.avatarUrl} alt={chatName} className="chat-avatar-img" />
@@ -428,7 +435,7 @@ export default function ChatWindow() {
         </div>
       )}
 
-      {/* ── INFO PANEL ── */}
+      {/* ── INFO PANEL (GROUP) ── */}
       {showInfo && (
         <ChatInfoPanel
           chat={chat}
@@ -439,8 +446,21 @@ export default function ChatWindow() {
         />
       )}
 
+      {/* ── USER INFO PAGE (header басқанда) ── */}
+      {showUserInfo && (
+        <UserInfoPage
+          chat={chat}
+          otherUser={otherUser}
+          currentUser={user}
+          onClose={() => setShowUserInfo(false)}
+          onChatDeleted={() => { removeChat(chat.id); setShowUserInfo(false) }}
+          onClearChat={() => setMessages(selectedChatId, [])}
+          onPinSet={() => { setPinMode('set'); setShowPin(true); setShowUserInfo(false) }}
+        />
+      )}
+
       {/* ── MESSAGES ── */}
-      <div className={`messages-area ${selectionMode ? 'selection-active' : ''}`}>
+      <div className={`messages-area ${selectionMode ? 'selection-active' : ''}`} style={{ display: showUserInfo ? 'none' : undefined }}>
         {loading
           ? (
             <div className="msgs-loading">
@@ -866,6 +886,170 @@ function ChatInfoPanel({ chat, currentUser, onClose, onChatDeleted, onChatUpdate
             </button>
           )}
         </div>
+      </div>
+    </div>
+  )
+}
+
+// ══════════════════════════════════════════
+//   USER INFO PAGE  (header басқанда ашылады)
+// ══════════════════════════════════════════
+function UserInfoPage({ chat, otherUser, currentUser, onClose, onChatDeleted, onClearChat, onPinSet }) {
+  const toast = useToast()
+  const [muted, setMuted] = useState(
+    () => localStorage.getItem(`muted_${chat?.id}`) === 'true'
+  )
+  const [clearing, setClearing] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+
+  const isGroup   = chat?.type === 'GROUP'
+  const target    = isGroup ? null : otherUser
+  const avatarUrl = isGroup ? chat?.avatarUrl : target?.avatarUrl
+  const name      = isGroup ? (chat?.name || 'Топ') : (target?.name || 'Пайдаланушы')
+  const username  = isGroup ? null : target?.username
+  const email     = isGroup ? null : target?.email
+
+  const toggleMute = () => {
+    const next = !muted
+    setMuted(next)
+    localStorage.setItem(`muted_${chat.id}`, String(next))
+    toast.success(next ? '🔕 Хабарландырулар өшірілді' : '🔔 Хабарландырулар қосылды')
+  }
+
+  const handleClear = async () => {
+    if (!window.confirm('Чаттың барлық хабарламаларын өшіресіз бе?')) return
+    setClearing(true)
+    try {
+      await chatAPI.clearChat(chat.id)
+      onClearChat()
+      toast.success('Чат тазартылды')
+    } catch (err) {
+      toast.error(err?.response?.data?.error || 'Қате болды')
+    } finally { setClearing(false) }
+  }
+
+  const handleDelete = async () => {
+    const msg = isGroup ? 'Топты жоясыз ба?' : 'Чатты жоясыз ба?'
+    if (!window.confirm(msg)) return
+    setDeleting(true)
+    try {
+      await chatAPI.delete(chat.id)
+      onChatDeleted()
+    } catch (err) {
+      toast.error(err?.response?.data?.error || 'Қате болды')
+      setDeleting(false)
+    }
+  }
+
+  const handleShareContact = () => {
+    const lines = [
+      `Аты: ${name}`,
+      username ? `Никнейм: @${username}` : '',
+      email    ? `Email: ${email}` : '',
+    ].filter(Boolean).join('\n')
+    navigator.clipboard.writeText(lines)
+      .then(() => toast.success('📋 Контакт алмасу буферіне көшірілді'))
+      .catch(() => toast.error('Көшіру мүмкін болмады'))
+  }
+
+  return (
+    <div className="user-info-page">
+      {/* ── BACK BUTTON ── */}
+      <div className="uip-topbar">
+        <button className="btn-icon uip-back" onClick={onClose} title="Артқа">
+          ←
+        </button>
+        <span className="uip-topbar-title">Ақпарат</span>
+      </div>
+
+      {/* ── AVATAR + NAME ── */}
+      <div className="uip-hero">
+        <div className="uip-avatar">
+          {avatarUrl
+            ? <img src={avatarUrl} alt={name} />
+            : <span>{name.charAt(0).toUpperCase()}</span>
+          }
+          {!isGroup && target?.online && <span className="uip-online-dot" />}
+        </div>
+        <h2 className="uip-name">{name}</h2>
+        {username && <p className="uip-username">@{username}</p>}
+        <p className="uip-status">
+          {!isGroup && (target?.online
+            ? <span className="uip-online-badge">● Онлайн</span>
+            : <span className="uip-offline-badge">
+                {target?.lastSeen
+                  ? `Соңғы рет: ${new Date(target.lastSeen + 'Z').toLocaleString('ru-RU', {
+                      timeZone: localStorage.getItem('timezone') || Intl.DateTimeFormat().resolvedOptions().timeZone,
+                      day:'2-digit', month:'2-digit', year:'numeric',
+                      hour:'2-digit', minute:'2-digit'
+                    })}`
+                  : 'Офлайн'}
+              </span>
+          )}
+          {isGroup && `${chat?.members?.length || 0} мүше`}
+        </p>
+      </div>
+
+      {/* ── ДЕРЕКТЕР ── */}
+      <div className="uip-info-rows">
+        {email && (
+          <div className="uip-info-row">
+            <span className="uip-info-icon">✉️</span>
+            <div>
+              <div className="uip-info-label">Email</div>
+              <div className="uip-info-value">{email}</div>
+            </div>
+          </div>
+        )}
+        {username && (
+          <div className="uip-info-row">
+            <span className="uip-info-icon">👤</span>
+            <div>
+              <div className="uip-info-label">Никнейм</div>
+              <div className="uip-info-value">@{username}</div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ── ӘРЕКЕТТЕР ── */}
+      <div className="uip-actions">
+
+        {/* Мутировать */}
+        <button className={`uip-action-btn ${muted ? 'active' : ''}`} onClick={toggleMute}>
+          <span className="uip-action-icon">{muted ? '🔕' : '🔔'}</span>
+          <span className="uip-action-label">{muted ? 'Дыбыс өшік' : 'Дыбыс'}</span>
+        </button>
+
+        {/* PIN орнату */}
+        <button className="uip-action-btn" onClick={onPinSet}>
+          <span className="uip-action-icon">🔒</span>
+          <span className="uip-action-label">PIN орнату</span>
+        </button>
+
+        {/* Контакт бөлісу */}
+        {!isGroup && (
+          <button className="uip-action-btn" onClick={handleShareContact}>
+            <span className="uip-action-icon">📤</span>
+            <span className="uip-action-label">Контакт</span>
+          </button>
+        )}
+
+      </div>
+
+      {/* ── ҚАУІПТІ ӘРЕКЕТТЕР ── */}
+      <div className="uip-danger-section">
+        <button className="uip-danger-btn" onClick={handleClear} disabled={clearing}>
+          <span>🗑</span>
+          <span>{clearing ? 'Тазартылуда...' : 'Чатты тазарту'}</span>
+        </button>
+
+        <div className="uip-divider" />
+
+        <button className="uip-danger-btn red" onClick={handleDelete} disabled={deleting}>
+          <span>{isGroup ? '🚪' : '❌'}</span>
+          <span>{deleting ? 'Жойылуда...' : isGroup ? 'Топтан шығу / жою' : 'Чатты жою'}</span>
+        </button>
       </div>
     </div>
   )

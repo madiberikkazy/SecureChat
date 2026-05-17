@@ -61,9 +61,13 @@ public class UserService {
 
         if (req.getUsername() != null && !req.getUsername().isBlank()) {
             String newUsername = req.getUsername().toLowerCase().trim();
+            // Никнейм форматын тексеру
+            if (!newUsername.matches("^[a-z0-9_.-]{3,30}$"))
+                throw new RuntimeException(
+                    "Никнейм 3-30 символ болуы, тек латын әріптері (a-z), сандар, _ және . болуы керек");
             if (!newUsername.equals(user.getUsername())) {
                 if (userRepo.existsByUsername(newUsername))
-                    throw new RuntimeException("Бұл никнейм бұрыннан бар");
+                    throw new RuntimeException("Бұл никнейм бұрыннан бар: @" + newUsername);
                 user.setUsername(newUsername);
             }
         }

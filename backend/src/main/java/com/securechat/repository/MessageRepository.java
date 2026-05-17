@@ -24,4 +24,7 @@ public interface MessageRepository extends JpaRepository<Message, Long> {
 
     // Бекітілген хабарламалар (pinned messages)
     List<Message> findByChatIdAndPinnedTrueOrderByPinnedAtDesc(Long chatId);
+
+    // Чаттың барлық хабарламаларын өшіру (clear chat)
+    void deleteAllByChatId(Long chatId);
 }

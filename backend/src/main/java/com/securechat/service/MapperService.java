@@ -14,6 +14,7 @@ import java.util.stream.Collectors;
 public class MapperService {
 
     private final MessageReadStatusRepository readStatusRepo;
+    private final EncryptionService enc;
 
     public UserDto toUserDto(User user) {
         if (user == null) return null;
@@ -52,11 +53,14 @@ public class MapperService {
             }
         }
 
+        // DB-дегі шифрланған content-ті ашамыз (🔓 decrypt)
+        String decryptedContent = msg.isDeleted() ? null : enc.decrypt(msg.getContent());
+
         return MessageDto.builder()
                 .id(msg.getId())
                 .chatId(msg.getChat().getId())
                 .sender(toUserDto(msg.getSender()))
-                .content(msg.isDeleted() ? null : msg.getContent())
+                .content(decryptedContent)
                 .type(msg.getType().name())
                 .fileUrl(msg.isDeleted() ? null : msg.getFileUrl())
                 .deleted(msg.isDeleted())
