@@ -40,6 +40,8 @@ public class Responses {
         private MessageDto lastMessage;
         private long unreadCount;
         private boolean hidden;
+        // Чат бекітілген уақыты (null = бекітілмеген)
+        private LocalDateTime pinnedAt;
     }
 
     @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
@@ -48,6 +50,7 @@ public class Responses {
         private UserDto user;
         private String role;
         private LocalDateTime joinedAt;
+        private LocalDateTime pinnedAt;
     }
 
     @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
@@ -63,6 +66,11 @@ public class Responses {
         private LocalDateTime editedAt;
         private MessageDto replyTo;
         private boolean read;
+        // Хабарлама бекітілген бе?
+        private boolean pinned;
+        private LocalDateTime pinnedAt;
+        // Жоғарыдан жіберілген хабарлама
+        private MessageDto forwardedFrom;
     }
 
     @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
@@ -89,7 +97,7 @@ public class Responses {
 
     @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
     public static class WebSocketMessageDto {
-        private String event; // NEW_MESSAGE, DELETE_MESSAGE, READ, TYPING, ONLINE
+        private String event; // NEW_MESSAGE, DELETE_MESSAGE, READ, TYPING, ONLINE, PIN_MESSAGE
         private Object data;
     }
 }

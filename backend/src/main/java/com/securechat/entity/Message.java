@@ -25,7 +25,8 @@ import lombok.Setter;
     indexes = {
         @Index(name = "idx_msg_chat", columnList = "chat_id"),
         @Index(name = "idx_msg_sender", columnList = "sender_id"),
-        @Index(name = "idx_msg_created", columnList = "created_at")
+        @Index(name = "idx_msg_created", columnList = "created_at"),
+        @Index(name = "idx_msg_pinned", columnList = "chat_id, pinned")
     })
 @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
 public class Message {
@@ -67,6 +68,17 @@ public class Message {
     @JoinColumn(name = "reply_to_id")
     private Message replyTo;
 
-    // VOICE типі қосылды
+    // ===== ХАТ-ХАБАРЛАМА ТҮРЛЕРІ =====
     public enum MessageType { TEXT, IMAGE, FILE, VOICE, SYSTEM }
+
+    // ===== ЧАТ ЖОҒАРЫЛАҒАН ХАБАРЛАМА (pin) =====
+    @Builder.Default
+    private boolean pinned = false;
+
+    private LocalDateTime pinnedAt;
+
+    // ===== ЖОҒАРЫДАН ЖІБЕРІЛГЕН ХАБАРЛАМА (forward) =====
+    @ManyToOne(fetch = FetchType.EAGER)
+    @JoinColumn(name = "forwarded_from_id")
+    private Message forwardedFrom;
 }

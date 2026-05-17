@@ -17,12 +17,12 @@ export default function ChatWindow() {
   const { user } = useAuth()
   const { t } = useLang()
   const {
-    selectedChatId, chats, messages, setMessages, addMessage,
+    selectedChatId, chats, messages, setMessages, addMessage, updateMessage,
     typingUsers, isChatUnlocked, unlockChat, clearUnread, upsertChat, removeChat,
   } = useChatStore()
   const toast = useToast()
 
-  const chat        = chats.find(c => c.id === selectedChatId)
+  const chat         = chats.find(c => c.id === selectedChatId)
   const chatMessages = messages[selectedChatId] || []
   const typingSet    = typingUsers[selectedChatId] || new Set()
 
@@ -30,18 +30,29 @@ export default function ChatWindow() {
   const [loading,        setLoading]        = useState(false)
   const [sending,        setSending]        = useState(false)
   const [showPin,        setShowPin]        = useState(false)
-  const [pinMode,        setPinMode]        = useState('verify')  // 'set' | 'verify' | 'recover'
+  const [pinMode,        setPinMode]        = useState('verify')
   const [showInfo,       setShowInfo]       = useState(false)
   const [replyTo,        setReplyTo]        = useState(null)
-  const [editingMsg,     setEditingMsg]     = useState(null)   // { id, content }
+  const [editingMsg,     setEditingMsg]     = useState(null)
   const [showAudioRec,   setShowAudioRec]   = useState(false)
   const [imageFile,      setImageFile]      = useState(null)
   const [imageCaption,   setImageCaption]   = useState('')
   const [uploadingMedia, setUploadingMedia] = useState(false)
 
-  const bottomRef   = useRef(null)
-  const inputRef    = useRef(null)
-  const typingTimer = useRef(null)
+  // ===== ХАБАРЛАМА ТАҢДАУ (selection mode) =====
+  const [selectionMode,  setSelectionMode]  = useState(false)
+  const [selectedMsgs,   setSelectedMsgs]   = useState(new Set()) // Set of message ids
+
+  // ===== ЖІБЕРУ ДИАЛОГЫ (forward dialog) =====
+  const [showForward,    setShowForward]    = useState(false)
+
+  // ===== БЕКІТІЛГЕН ХАБАРЛАМАЛАР =====
+  const [pinnedMessages, setPinnedMessages] = useState([])
+  const [pinnedIndex,    setPinnedIndex]    = useState(0) // Which pinned msg to show in banner
+
+  const bottomRef    = useRef(null)
+  const inputRef     = useRef(null)
+  const typingTimer  = useRef(null)
   const fileInputRef = useRef(null)
 
   useChatWebSocket(selectedChatId)
@@ -56,6 +67,14 @@ export default function ChatWindow() {
     }
     window.addEventListener('openPinRecover', handler)
     return () => window.removeEventListener('openPinRecover', handler)
+  }, [selectedChatId])
+
+  // Reset selection when chat changes
+  useEffect(() => {
+    setSelectionMode(false)
+    setSelectedMsgs(new Set())
+    setPinnedMessages([])
+    setPinnedIndex(0)
   }, [selectedChatId])
 
   // ===== ХАБАРЛАМАЛАРДЫ ЖҮКТЕУ =====
@@ -73,6 +92,11 @@ export default function ChatWindow() {
       })
       .catch(() => toast.error(t('failLoadMessages')))
       .finally(() => setLoading(false))
+
+    // Бекітілген хабарламаларды жүктеу
+    chatAPI.getPinnedMessages(selectedChatId)
+      .then(res => setPinnedMessages(res.data))
+      .catch(() => {})
 
     inputRef.current?.focus()
   }, [selectedChatId, isChatUnlocked(selectedChatId)])
@@ -117,7 +141,6 @@ export default function ChatWindow() {
     setSending(true)
     try {
       await messageAPI.edit(editingMsg.id, { content: input.trim() })
-      // EDIT_MESSAGE WS event через useWebSocket сам обновит store
     } catch {
       toast.error(t('failEdit'))
     } finally {
@@ -156,25 +179,35 @@ export default function ChatWindow() {
         headers: { Authorization: `Bearer ${token}` },
         body: formData,
       })
-      if (!res.ok) throw new Error()
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err.error || 'Қате')
+      }
       const data = await res.json()
       addMessage(selectedChatId, data)
       setImageFile(null)
       setImageCaption('')
       setReplyTo(null)
-    } catch {
-      toast.error(t('failSendImage'))
+    } catch (e) {
+      toast.error(e.message || t('failSendImage'))
     } finally { setUploadingMedia(false) }
   }, [selectedChatId, imageCaption, replyTo])
 
-  // ===== ДЫБЫС ЖІБЕРУ =====
+  // ===== ДЫБЫС ЖІБЕРУ (VOICE BUG FIX) =====
+  // Blob-ты File объектіне айналдырамыз — браузер content-type-ты дұрыс жібереді
   const handleSendVoice = useCallback(async (audioBlob) => {
     setShowAudioRec(false)
     setUploadingMedia(true)
     try {
       const formData = new FormData()
       formData.append('chatId', selectedChatId)
-      formData.append('file', audioBlob, 'voice.webm')
+
+      // ★ FIX: Blob → File (content-type: audio/webm, таза)
+      const mimeType = audioBlob.type || 'audio/webm'
+      const ext = mimeType.includes('ogg') ? 'ogg' : mimeType.includes('mp4') ? 'mp4' : 'webm'
+      const audioFile = new File([audioBlob], `voice.${ext}`, { type: 'audio/webm' })
+      formData.append('file', audioFile)
+
       if (replyTo) formData.append('replyToId', replyTo.id)
 
       const token = localStorage.getItem('token')
@@ -183,12 +216,15 @@ export default function ChatWindow() {
         headers: { Authorization: `Bearer ${token}` },
         body: formData,
       })
-      if (!res.ok) throw new Error()
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err.error || 'Сервер қатесі')
+      }
       const data = await res.json()
       addMessage(selectedChatId, data)
       setReplyTo(null)
-    } catch {
-      toast.error(t('failSendVoice'))
+    } catch (e) {
+      toast.error(e.message || t('failSendVoice'))
     } finally { setUploadingMedia(false) }
   }, [selectedChatId, replyTo])
 
@@ -197,12 +233,82 @@ export default function ChatWindow() {
       e.preventDefault()
       editingMsg ? handleEditSubmit() : handleSend()
     }
-    if (e.key === 'Escape' && editingMsg) cancelEdit()
+    if (e.key === 'Escape') {
+      if (editingMsg) cancelEdit()
+      if (selectionMode) exitSelectionMode()
+    }
   }
 
   const handleDelete = async (msgId) => {
     try { await messageAPI.delete(msgId) }
     catch { toast.error(t('failDelete')) }
+  }
+
+  // ===== ТАҢДАУ РЕЖИМІ =====
+  const toggleSelection = (msgId) => {
+    setSelectedMsgs(prev => {
+      const next = new Set(prev)
+      if (next.has(msgId)) next.delete(msgId)
+      else next.add(msgId)
+      return next
+    })
+  }
+
+  const exitSelectionMode = () => {
+    setSelectionMode(false)
+    setSelectedMsgs(new Set())
+  }
+
+  const enterSelectionMode = (msgId) => {
+    setSelectionMode(true)
+    setSelectedMsgs(new Set([msgId]))
+  }
+
+  // ===== ХАБАРЛАМАНЫ БЕКІТУ =====
+  const handlePinMessage = async (msg) => {
+    try {
+      if (msg.pinned) {
+        const res = await messageAPI.unpin(msg.id)
+        updateMessage(selectedChatId, res.data)
+        setPinnedMessages(prev => prev.filter(p => p.id !== msg.id))
+        toast.success('Хабарлама бекітуі алынды')
+      } else {
+        const res = await messageAPI.pin(msg.id)
+        updateMessage(selectedChatId, res.data)
+        setPinnedMessages(prev => [res.data, ...prev])
+        toast.success('Хабарлама бекітілді 📌')
+      }
+    } catch {
+      toast.error('Қате болды')
+    }
+  }
+
+  // ===== ЖІБЕРУ (FORWARD) =====
+  const handleForward = async (targetChatId) => {
+    if (selectedMsgs.size === 0) return
+    setShowForward(false)
+    try {
+      const res = await messageAPI.forward({
+        targetChatId,
+        messageIds: [...selectedMsgs],
+      })
+      if (targetChatId === selectedChatId) {
+        res.data.forEach(msg => addMessage(selectedChatId, msg))
+      }
+      toast.success(`${res.data.length} хабарлама жіберілді`)
+      exitSelectionMode()
+    } catch {
+      toast.error('Жіберу сәтсіз болды')
+    }
+  }
+
+  // ===== ТАҢДАЛҒАНДАРДЫ ӨШІ РУ =====
+  const handleDeleteSelected = async () => {
+    if (!window.confirm(`${selectedMsgs.size} хабарламаны өшіру?`)) return
+    for (const id of selectedMsgs) {
+      try { await messageAPI.delete(id) } catch {}
+    }
+    exitSelectionMode()
   }
 
   if (!chat) return null
@@ -220,69 +326,107 @@ export default function ChatWindow() {
         </button>
       </div>
       {showPin && (
-        <PinModal
-          chatId={selectedChatId}
-          mode={pinMode}
-          onClose={() => setShowPin(false)}
-        />
+        <PinModal chatId={selectedChatId} mode={pinMode} onClose={() => setShowPin(false)} />
       )}
     </div>
   )
 
-  const chatName  = getChatName(chat, user)
-  const otherUser = getChatOtherUser(chat, user)
+  const chatName   = getChatName(chat, user)
+  const otherUser  = getChatOtherUser(chat, user)
   const typingList = [...typingSet].filter(u => u !== user?.username)
 
   return (
     <div className="chat-window">
 
-      {/* ── HEADER ── */}
-      <div className="chat-header">
-        <div className="chat-header-info">
-          <div className="chat-avatar-wrap">
-            {chat.avatarUrl || otherUser?.avatarUrl
-              ? <img src={chat.avatarUrl || otherUser?.avatarUrl} alt={chatName} className="chat-avatar-img" />
-              : <div className="chat-avatar-initials">{getInitials(chatName)}</div>
-            }
-            {otherUser?.online && <span className="avatar-dot" />}
-          </div>
-          <div className="chat-header-text">
-            <div className="chat-header-name">{chatName}</div>
-            <div className="chat-header-sub">
-              {typingList.length > 0
-                ? <span className="typing-status">✏️ {t('typing')}</span>
-                : chat.type === 'GROUP'
-                  ? `${chat.members?.length || 0} ${t('members')}`
-                  : formatLastSeen(otherUser?.lastSeen, otherUser?.online)}
-            </div>
-          </div>
-        </div>
-
-        <div className="chat-header-actions">
-          {!chat.hidden
-            ? (
-              <button className="btn-icon header-btn" title={t('setPinTitle')}
-                onClick={() => { setPinMode('set'); setShowPin(true) }}>
-                🔒
-              </button>
-            )
-            : (
-              <button className="btn-icon header-btn" title={t('removePinTitle')}
-                onClick={async () => {
-                  await chatAPI.removePin(selectedChatId)
-                  upsertChat({ ...chat, hidden: false })
-                  toast.success(t('hiddenChatRemoved'))
-                }}>
-                🔓
-              </button>
-            )
-          }
-          <button className="btn-icon header-btn" title={t('chatInfo')}
-            onClick={() => setShowInfo(v => !v)}>
-            ℹ️
+      {/* ── SELECTION BAR (хабарлама таңдалғанда жоғарыда шығады) ── */}
+      {selectionMode && (
+        <div className="selection-bar">
+          <button className="btn-icon" onClick={exitSelectionMode} title="Болдырмау">✕</button>
+          <span className="selection-count">{selectedMsgs.size} таңдалды</span>
+          <div style={{ flex: 1 }} />
+          <button className="btn btn-ghost btn-sm" onClick={() => setShowForward(true)}
+            disabled={selectedMsgs.size === 0}>
+            ➤ Жіберу
+          </button>
+          <button className="btn btn-sm" style={{ color: 'var(--color-error)' }}
+            onClick={handleDeleteSelected} disabled={selectedMsgs.size === 0}>
+            🗑 Өшіру
           </button>
         </div>
-      </div>
+      )}
+
+      {/* ── HEADER ── */}
+      {!selectionMode && (
+        <div className="chat-header">
+          <div className="chat-header-info">
+            <div className="chat-avatar-wrap">
+              {chat.avatarUrl || otherUser?.avatarUrl
+                ? <img src={chat.avatarUrl || otherUser?.avatarUrl} alt={chatName} className="chat-avatar-img" />
+                : <div className="chat-avatar-initials">{getInitials(chatName)}</div>
+              }
+              {otherUser?.online && <span className="avatar-dot" />}
+            </div>
+            <div className="chat-header-text">
+              <div className="chat-header-name">{chatName}</div>
+              <div className="chat-header-sub">
+                {typingList.length > 0
+                  ? <span className="typing-status">✏️ {t('typing')}</span>
+                  : chat.type === 'GROUP'
+                    ? `${chat.members?.length || 0} ${t('members')}`
+                    : formatLastSeen(otherUser?.lastSeen, otherUser?.online)}
+              </div>
+            </div>
+          </div>
+
+          <div className="chat-header-actions">
+            {!chat.hidden
+              ? (
+                <button className="btn-icon header-btn" title={t('setPinTitle')}
+                  onClick={() => { setPinMode('set'); setShowPin(true) }}>
+                  🔒
+                </button>
+              )
+              : (
+                <button className="btn-icon header-btn" title={t('removePinTitle')}
+                  onClick={async () => {
+                    await chatAPI.removePin(selectedChatId)
+                    upsertChat({ ...chat, hidden: false })
+                    toast.success(t('hiddenChatRemoved'))
+                  }}>
+                  🔓
+                </button>
+              )
+            }
+            <button className="btn-icon header-btn" title={t('chatInfo')}
+              onClick={() => setShowInfo(v => !v)}>
+              ℹ️
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── PINNED MESSAGE BANNER ── */}
+      {pinnedMessages.length > 0 && !selectionMode && (
+        <div
+          className="pinned-banner"
+          onClick={() => {
+            // Бекітілген хабарламаға скролл жасалуы мүмкін (future)
+            setPinnedIndex(i => (i + 1) % pinnedMessages.length)
+          }}
+          title="Бекітілген хабарлама (басу арқылы ауысу)"
+        >
+          <span className="pinned-banner-icon">📌</span>
+          <div className="pinned-banner-content">
+            <span className="pinned-banner-label">Бекітілген хабарлама {pinnedMessages.length > 1 ? `(${pinnedIndex + 1}/${pinnedMessages.length})` : ''}</span>
+            <span className="pinned-banner-text">
+              {pinnedMessages[pinnedIndex]?.content ||
+               (pinnedMessages[pinnedIndex]?.type === 'IMAGE' ? '🖼 Сурет' :
+                pinnedMessages[pinnedIndex]?.type === 'VOICE' ? '🎤 Дыбыс' :
+                pinnedMessages[pinnedIndex]?.type === 'FILE'  ? '📎 Файл' : '...')}
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* ── INFO PANEL ── */}
       {showInfo && (
@@ -296,7 +440,7 @@ export default function ChatWindow() {
       )}
 
       {/* ── MESSAGES ── */}
-      <div className="messages-area">
+      <div className={`messages-area ${selectionMode ? 'selection-active' : ''}`}>
         {loading
           ? (
             <div className="msgs-loading">
@@ -311,10 +455,11 @@ export default function ChatWindow() {
               </div>
             )
             : chatMessages.map((msg, i) => {
-                const isOwn        = msg.sender?.id === user?.id
-                const showDate     = i === 0 || !sameDay(chatMessages[i - 1]?.createdAt, msg.createdAt)
+                const isOwn          = msg.sender?.id === user?.id
+                const showDate       = i === 0 || !sameDay(chatMessages[i - 1]?.createdAt, msg.createdAt)
                 const showSenderName = !isOwn && chat.type === 'GROUP'
                   && (i === 0 || chatMessages[i - 1]?.sender?.id !== msg.sender?.id)
+                const isSelected = selectedMsgs.has(msg.id)
 
                 return (
                   <div key={msg.id}>
@@ -323,11 +468,19 @@ export default function ChatWindow() {
                       message={msg}
                       isOwn={isOwn}
                       showSenderName={showSenderName}
-                      onReply={() => { setReplyTo(msg); setEditingMsg(null) }}
-                      onDelete={isOwn && !msg.deleted ? () => handleDelete(msg.id) : null}
-                      onEdit={isOwn && !msg.deleted && msg.type === 'TEXT'
+                      selectionMode={selectionMode}
+                      isSelected={isSelected}
+                      onSelect={() => {
+                        if (selectionMode) toggleSelection(msg.id)
+                        else enterSelectionMode(msg.id)
+                      }}
+                      onLongPress={() => enterSelectionMode(msg.id)}
+                      onReply={selectionMode ? null : () => { setReplyTo(msg); setEditingMsg(null) }}
+                      onDelete={!selectionMode && isOwn && !msg.deleted ? () => handleDelete(msg.id) : null}
+                      onEdit={!selectionMode && isOwn && !msg.deleted && msg.type === 'TEXT'
                         ? () => startEdit(msg)
                         : null}
+                      onPin={!selectionMode && !msg.deleted ? () => handlePinMessage(msg) : null}
                       t={t}
                     />
                   </div>
@@ -338,7 +491,7 @@ export default function ChatWindow() {
       </div>
 
       {/* ── TYPING INDICATOR ── */}
-      {typingList.length > 0 && (
+      {typingList.length > 0 && !selectionMode && (
         <div className="typing-indicator">
           <div className="typing-dots"><span /><span /><span /></div>
           <span>{typingList.join(', ')} {t('typing')}</span>
@@ -405,68 +558,78 @@ export default function ChatWindow() {
       )}
 
       {/* ── TOOLBAR ── */}
-      <div className="input-toolbar">
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/jpeg,image/png,image/gif,image/webp"
-          hidden
-          onChange={e => {
-            const file = e.target.files?.[0]
-            if (file) setImageFile(file)
-            e.target.value = ''
-          }}
-        />
-        <button className="toolbar-btn"
-          onClick={() => fileInputRef.current?.click()}
-          disabled={uploadingMedia || !!imageFile}
-          title={t('sendImage')}>
-          📷
-        </button>
-        <button className={`toolbar-btn ${showAudioRec ? 'active' : ''}`}
-          onClick={() => setShowAudioRec(v => !v)}
-          disabled={uploadingMedia}
-          title={t('sendVoice')}>
-          🎤
-        </button>
-      </div>
+      {!selectionMode && (
+        <div className="input-toolbar">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/jpeg,image/png,image/gif,image/webp"
+            hidden
+            onChange={e => {
+              const file = e.target.files?.[0]
+              if (file) setImageFile(file)
+              e.target.value = ''
+            }}
+          />
+          <button className="toolbar-btn"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploadingMedia || !!imageFile}
+            title={t('sendImage')}>
+            📷
+          </button>
+          <button className={`toolbar-btn ${showAudioRec ? 'active' : ''}`}
+            onClick={() => setShowAudioRec(v => !v)}
+            disabled={uploadingMedia}
+            title={t('sendVoice')}>
+            🎤
+          </button>
+        </div>
+      )}
 
       {/* ── INPUT ── */}
-      <div className="chat-input-bar">
-        <textarea
-          ref={inputRef}
-          className="chat-textarea"
-          placeholder={t('typeMessage')}
-          value={input}
-          onChange={handleInputChange}
-          onKeyDown={handleKey}
-          rows={1}
-          disabled={uploadingMedia}
-          onInput={e => {
-            e.target.style.height = 'auto'
-            e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px'
-          }}
-        />
-        <button
-          className="send-btn"
-          onClick={editingMsg ? handleEditSubmit : handleSend}
-          disabled={!input.trim() || sending || uploadingMedia}
-        >
-          {sending || uploadingMedia
-            ? <span className="spinner" style={{ width: 18, height: 18 }} />
-            : editingMsg
-              ? <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
-              : <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
-          }
-        </button>
-      </div>
+      {!selectionMode && (
+        <div className="chat-input-bar">
+          <textarea
+            ref={inputRef}
+            className="chat-textarea"
+            placeholder={t('typeMessage')}
+            value={input}
+            onChange={handleInputChange}
+            onKeyDown={handleKey}
+            rows={1}
+            disabled={uploadingMedia}
+            onInput={e => {
+              e.target.style.height = 'auto'
+              e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px'
+            }}
+          />
+          <button
+            className="send-btn"
+            onClick={editingMsg ? handleEditSubmit : handleSend}
+            disabled={!input.trim() || sending || uploadingMedia}
+          >
+            {sending || uploadingMedia
+              ? <span className="spinner" style={{ width: 18, height: 18 }} />
+              : editingMsg
+                ? <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
+                : <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+            }
+          </button>
+        </div>
+      )}
 
       {/* ── PIN MODAL ── */}
       {showPin && (
-        <PinModal
-          chatId={selectedChatId}
-          mode={pinMode}
-          onClose={() => setShowPin(false)}
+        <PinModal chatId={selectedChatId} mode={pinMode} onClose={() => setShowPin(false)} />
+      )}
+
+      {/* ── FORWARD DIALOG ── */}
+      {showForward && (
+        <ForwardDialog
+          chats={chats.filter(c => c.id !== selectedChatId)}
+          currentUser={user}
+          onForward={handleForward}
+          onClose={() => setShowForward(false)}
         />
       )}
     </div>
@@ -474,16 +637,48 @@ export default function ChatWindow() {
 }
 
 // ── MESSAGE BUBBLE ──
-function MessageBubble({ message, isOwn, showSenderName, onReply, onDelete, onEdit, t }) {
+function MessageBubble({
+  message, isOwn, showSenderName,
+  selectionMode, isSelected,
+  onSelect, onLongPress,
+  onReply, onDelete, onEdit, onPin, t,
+}) {
   const isMedia = message.type === 'IMAGE' || message.type === 'VOICE' || message.type === 'FILE'
   const isText  = !message.type || message.type === 'TEXT'
 
+  // Long press for mobile
+  const pressTimer = useRef(null)
+  const handlePointerDown = () => {
+    pressTimer.current = setTimeout(() => { onLongPress?.() }, 600)
+  }
+  const handlePointerUp = () => clearTimeout(pressTimer.current)
+
   return (
-    <div className={`msg-wrapper ${isOwn ? 'own' : 'other'}`}>
+    <div
+      className={`msg-wrapper ${isOwn ? 'own' : 'other'} ${isSelected ? 'msg-selected' : ''}`}
+      onClick={selectionMode ? onSelect : undefined}
+      onPointerDown={handlePointerDown}
+      onPointerUp={handlePointerUp}
+      onPointerLeave={handlePointerUp}
+    >
+      {/* Таңдау чекбоксы */}
+      {selectionMode && (
+        <div className={`msg-checkbox ${isSelected ? 'checked' : ''}`}>
+          {isSelected && <span>✓</span>}
+        </div>
+      )}
+
       <div className="msg-group">
 
         {showSenderName && (
           <span className="msg-sender-name">{message.sender?.name}</span>
+        )}
+
+        {/* Жіберілген хабарлама (forwarded) */}
+        {message.forwardedFrom && !message.deleted && (
+          <div className={`msg-forwarded ${isOwn ? 'own' : 'other'}`}>
+            <span className="msg-forwarded-label">➤ {message.forwardedFrom.sender?.name} жіберді</span>
+          </div>
         )}
 
         {message.replyTo && (
@@ -503,12 +698,15 @@ function MessageBubble({ message, isOwn, showSenderName, onReply, onDelete, onEd
 
         {/* МӘТІН */}
         {(isText || message.deleted) && (
-          <div className={`msg-bubble ${isOwn ? 'own' : 'other'} ${message.deleted ? 'deleted' : ''}`}>
+          <div className={`msg-bubble ${isOwn ? 'own' : 'other'} ${message.deleted ? 'deleted' : ''} ${message.pinned ? 'msg-pinned' : ''}`}>
             {message.deleted
               ? <span className="msg-deleted">{t('msgDeleted')}</span>
               : <span className="msg-text">{message.content}</span>
             }
             <div className="msg-meta">
+              {message.pinned && !message.deleted && (
+                <span className="msg-pin-indicator" title="Бекітілген">📌</span>
+              )}
               {message.editedAt && !message.deleted && (
                 <span className="msg-edited">✎</span>
               )}
@@ -534,16 +732,22 @@ function MessageBubble({ message, isOwn, showSenderName, onReply, onDelete, onEd
         )}
 
         {/* ACTIONS */}
-        {!message.deleted && (
+        {!message.deleted && !selectionMode && (
           <div className={`msg-actions ${isOwn ? 'own' : ''}`}>
             {onReply && (
-              <button className="msg-action-btn" onClick={onReply} title={t('reply')}>↩</button>
+              <button className="msg-action-btn" onClick={e => { e.stopPropagation(); onReply() }} title={t('reply')}>↩</button>
             )}
             {onEdit && (
-              <button className="msg-action-btn" onClick={onEdit} title={t('editMessage')}>✏️</button>
+              <button className="msg-action-btn" onClick={e => { e.stopPropagation(); onEdit() }} title={t('editMessage')}>✏️</button>
             )}
+            {onPin && (
+              <button className="msg-action-btn" onClick={e => { e.stopPropagation(); onPin() }} title={message.pinned ? 'Бекітуді алу' : 'Бекіту'}>
+                {message.pinned ? '📌' : '📍'}
+              </button>
+            )}
+            <button className="msg-action-btn" onClick={e => { e.stopPropagation(); onSelect?.() }} title="Таңдау">☑</button>
             {onDelete && (
-              <button className="msg-action-btn danger" onClick={onDelete} title={t('deleteMessage')}>🗑</button>
+              <button className="msg-action-btn danger" onClick={e => { e.stopPropagation(); onDelete() }} title={t('deleteMessage')}>🗑</button>
             )}
           </div>
         )}
@@ -560,7 +764,7 @@ function DateDivider({ date, t }) {
   yesterday.setDate(today.getDate() - 1)
 
   let label
-  if (sameDay(d, today))     label = t('today')
+  if (sameDay(d, today))          label = t('today')
   else if (sameDay(d, yesterday)) label = t('yesterday')
   else label = d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })
 
@@ -586,7 +790,8 @@ function ChatInfoPanel({ chat, currentUser, onClose, onChatDeleted, onChatUpdate
   }
 
   const handleDelete = async () => {
-    if (!window.confirm(t('deleteConfirm'))) return
+    const label = chat.type === 'GROUP' ? t('deleteConfirm') : 'Чаттан шығуды растайсыз ба?'
+    if (!window.confirm(label)) return
     try {
       await chatAPI.delete(chat.id)
       onChatDeleted()
@@ -629,7 +834,6 @@ function ChatInfoPanel({ chat, currentUser, onClose, onChatDeleted, onChatUpdate
                 <span className="info-member-name">{m.user?.name}</span>
                 <span className="info-member-role">{roleLabel(m.role)}</span>
               </div>
-              {/* Owner-ға мүше рөлін өзгерту */}
               {isOwner && m.user?.id !== currentUser?.id && m.role !== 'OWNER' && (
                 <button
                   className="btn btn-ghost btn-xs"
@@ -643,22 +847,71 @@ function ChatInfoPanel({ chat, currentUser, onClose, onChatDeleted, onChatUpdate
           ))}
         </div>
 
-        {/* Шығу / жою */}
-        {chat.type === 'GROUP' && (
-          <div className="info-panel-actions">
-            {!isOwner && (
-              <button className="btn btn-ghost" style={{ color: 'var(--color-error)' }}
-                onClick={handleLeave}>
-                {t('leaveGroup')}
+        {/* Шығу / жою — барлық чат түрлері үшін */}
+        <div className="info-panel-actions">
+          {chat.type === 'PRIVATE' && (
+            <button className="btn btn-danger" onClick={handleDelete}>
+              🗑 Чатты өшіру
+            </button>
+          )}
+          {chat.type === 'GROUP' && !isOwner && (
+            <button className="btn btn-ghost" style={{ color: 'var(--color-error)' }}
+              onClick={handleLeave}>
+              {t('leaveGroup')}
+            </button>
+          )}
+          {chat.type === 'GROUP' && isOwner && (
+            <button className="btn btn-danger" onClick={handleDelete}>
+              {t('deleteGroup')}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── FORWARD DIALOG ──
+function ForwardDialog({ chats, currentUser, onForward, onClose }) {
+  const [search, setSearch] = useState('')
+
+  const filtered = chats.filter(c => {
+    const name = c.name || c.members?.find(m => m.user?.id !== currentUser?.id)?.user?.name || ''
+    return name.toLowerCase().includes(search.toLowerCase())
+  })
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="forward-dialog" onClick={e => e.stopPropagation()}>
+        <div className="forward-header">
+          <h3>Чатқа жіберу</h3>
+          <button className="btn-icon" onClick={onClose}>✕</button>
+        </div>
+        <div className="forward-search">
+          <input
+            className="input"
+            placeholder="Чат іздеу..."
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            autoFocus
+          />
+        </div>
+        <div className="forward-list">
+          {filtered.length === 0 ? (
+            <div className="forward-empty">Чат табылмады</div>
+          ) : filtered.map(chat => {
+            const name = chat.name ||
+              chat.members?.find(m => m.user?.id !== currentUser?.id)?.user?.name || 'Чат'
+            return (
+              <button key={chat.id} className="forward-item" onClick={() => onForward(chat.id)}>
+                <div className="forward-item-avatar">
+                  {getInitials(name)}
+                </div>
+                <span className="forward-item-name">{name}</span>
               </button>
-            )}
-            {isOwner && (
-              <button className="btn btn-danger" onClick={handleDelete}>
-                {t('deleteGroup')}
-              </button>
-            )}
-          </div>
-        )}
+            )
+          })}
+        </div>
       </div>
     </div>
   )

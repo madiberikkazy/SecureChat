@@ -51,6 +51,12 @@ export function useChatWebSocket(chatId) {
           updateMessage(chatId, data)
           break
 
+        // Хабарламаны бекіту / алу
+        case 'PIN_MESSAGE':
+        case 'UNPIN_MESSAGE':
+          updateMessage(chatId, data)
+          break
+
         case 'TYPING':
           if (data.typing) {
             setTyping(chatId, data.username, true)

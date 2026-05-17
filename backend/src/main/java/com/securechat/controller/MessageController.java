@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.security.Principal;
+import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -52,6 +53,27 @@ public class MessageController extends BaseController {
                                            @RequestBody EditMessageRequest req,
                                            @AuthenticationPrincipal UserDetails ud) {
         return ResponseEntity.ok(messageService.editMessage(id, req.getContent(), currentUser(ud)));
+    }
+
+    // POST /api/messages/{id}/pin — хабарламаны бекіту
+    @PostMapping("/api/messages/{id}/pin")
+    public ResponseEntity<MessageDto> pinMessage(@PathVariable Long id,
+                                                 @AuthenticationPrincipal UserDetails ud) {
+        return ResponseEntity.ok(messageService.pinMessage(id, currentUser(ud)));
+    }
+
+    // DELETE /api/messages/{id}/pin — бекітуді алу
+    @DeleteMapping("/api/messages/{id}/pin")
+    public ResponseEntity<MessageDto> unpinMessage(@PathVariable Long id,
+                                                   @AuthenticationPrincipal UserDetails ud) {
+        return ResponseEntity.ok(messageService.unpinMessage(id, currentUser(ud)));
+    }
+
+    // POST /api/messages/forward — хабарламаларды жіберу
+    @PostMapping("/api/messages/forward")
+    public ResponseEntity<List<MessageDto>> forwardMessages(@RequestBody ForwardMessagesRequest req,
+                                                            @AuthenticationPrincipal UserDetails ud) {
+        return ResponseEntity.ok(messageService.forwardMessages(req, currentUser(ud)));
     }
 
     // POST /api/messages/image — сурет хабарламасы
