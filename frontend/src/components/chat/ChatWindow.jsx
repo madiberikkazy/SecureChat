@@ -176,7 +176,7 @@ export default function ChatWindow() {
       if (replyTo) formData.append('replyToId', replyTo.id)
 
       const token = localStorage.getItem('token')
-      const res = await fetch('/api/messages/image', {
+      const res = await fetch('https://securechat-production-b7f9.up.railway.app/api/messages/image', {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
         body: formData,
@@ -213,7 +213,7 @@ export default function ChatWindow() {
       if (replyTo) formData.append('replyToId', replyTo.id)
 
       const token = localStorage.getItem('token')
-      const res = await fetch('/api/messages/voice', {
+      const res = await fetch('https://securechat-production-b7f9.up.railway.app/api/messages/voice', {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
         body: formData,
