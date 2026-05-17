@@ -20,8 +20,9 @@ api.interceptors.response.use(
 )
 
 export const authAPI = {
-  register: d => api.post('/auth/register', d),
-  login:    d => api.post('/auth/login', d),
+  register:      d => api.post('/auth/register', d),
+  login:         d => api.post('/auth/login', d),
+  checkUsername: u => api.get('/auth/check-username', { params: { username: u } }),
 }
 
 export const userAPI = {
@@ -54,6 +55,7 @@ export const chatAPI = {
   pinChat:           id           => api.post(`/chats/${id}/pin-chat`),
   unpinChat:         id           => api.delete(`/chats/${id}/pin-chat`),
   markRead:          (id, d)      => api.post(`/chats/${id}/read`, d),
+  clearChat:         id           => api.delete(`/chats/${id}/messages`),
 }
 
 export const messageAPI = {

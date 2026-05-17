@@ -23,16 +23,25 @@ public class AuthService {
     @Transactional
     public AuthResponse register(RegisterRequest req) {
 
-        if (userRepo.existsByUsername(req.getUsername()))
-            throw new RuntimeException("Бұл никнейм бұрыннан бар: @" + req.getUsername());
+        // Никнеймді бірден нормализациялаймыз (lowercase + trim)
+        String username = req.getUsername().toLowerCase().trim();
+
+        // Никнейм форматын тексеру: тек a-z, 0-9, _ және - рұқсат
+        if (!username.matches("^[a-z0-9_.-]{3,30}$"))
+            throw new RuntimeException(
+                "Никнейм 3-30 символ болуы, тек латын әріптері (a-z), сандар, _ және . болуы керек");
+
+        // Никнейм бірегейлігін тексеру (lowercase арқылы — case-insensitive)
+        if (userRepo.existsByUsername(username))
+            throw new RuntimeException("Бұл никнейм бұрыннан бар: @" + username);
 
         if (req.getEmail() != null && !req.getEmail().isBlank()) {
-            if (userRepo.existsByEmail(req.getEmail()))
+            if (userRepo.existsByEmail(req.getEmail().toLowerCase().trim()))
                 throw new RuntimeException("Бұл email бұрыннан тіркелген");
         }
 
         if (req.getPhone() != null && !req.getPhone().isBlank()) {
-            if (userRepo.existsByPhone(req.getPhone()))
+            if (userRepo.existsByPhone(req.getPhone().trim()))
                 throw new RuntimeException("Бұл телефон бұрыннан тіркелген");
         }
 
@@ -42,7 +51,7 @@ public class AuthService {
             throw new RuntimeException("Email немесе телефон нөмірінің біреуі міндетті");
 
         User user = User.builder()
-                .username(req.getUsername().toLowerCase().trim())
+                .username(username)
                 .name(req.getName().trim())
                 .email(hasEmail ? req.getEmail().toLowerCase().trim() : null)
                 .phone(hasPhone ? req.getPhone().trim() : null)

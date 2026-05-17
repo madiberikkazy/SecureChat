@@ -378,6 +378,19 @@ public class ChatService {
                 .build();
     }
 
+    // ===== ЧАТТЫ ТАЗАРТУ (CLEAR CHAT) =====
+    @Transactional
+    public void clearChat(Long chatId, User requester) {
+        if (!memberRepo.existsByChatIdAndUserIdAndActiveTrue(chatId, requester.getId()))
+            throw new RuntimeException("Рұқсат жоқ");
+        messageRepo.deleteAllByChatId(chatId);
+        // Чаттың соңғы хабарлама уақытын тазарту
+        chatRepo.findById(chatId).ifPresent(chat -> {
+            chat.setLastMessageAt(null);
+            chatRepo.save(chat);
+        });
+    }
+
     private void addMember(Chat chat, User user, ChatMember.Role role) {
         memberRepo.save(ChatMember.builder()
                 .chat(chat).user(user).role(role).build());

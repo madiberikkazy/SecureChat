@@ -88,9 +88,19 @@ function ProfileSection() {
   const set = k => e => setF(p => ({ ...p, [k]: e.target.value }))
 
   const save = async () => {
+    // Никнейм валидациясы
+    const username = f.username?.trim().toLowerCase()
+    if (username) {
+      if (username.length < 3) { toast.error('Никнейм кемінде 3 символ болуы керек'); return }
+      if (username.length > 30) { toast.error('Никнейм 30 символдан аспауы керек'); return }
+      if (!/^[a-z0-9_.−]+$/.test(username)) {
+        toast.error('Никнейм тек латын әріптерін (a-z), сандарды, _ және . қамтуы мүмкін')
+        return
+      }
+    }
     setLoading(true)
     try {
-      const res = await userAPI.updateProfile(f)
+      const res = await userAPI.updateProfile({ ...f, username })
       updateUser(res.data)
       toast.success(t('profileSaved'))
     } catch (err) {
