@@ -1,6 +1,8 @@
 import axios from 'axios'
 
-const api = axios.create({ baseURL: '/api' })
+const BASE_URL = import.meta.env.VITE_API_URL || '/api'
+
+const api = axios.create({ baseURL: BASE_URL })
 
 api.interceptors.request.use(cfg => {
   const token = localStorage.getItem('token')
@@ -46,12 +48,10 @@ export const chatAPI = {
   addMember:         (id, d)      => api.post(`/chats/${id}/members`, d),
   removeMember:      (id, uid)    => api.delete(`/chats/${id}/members/${uid}`),
   changeMemberRole:  (id, uid, d) => api.patch(`/chats/${id}/members/${uid}/role`, d),
-  // Жасырын чат PIN
   setPin:            (id, pin)    => api.post(`/chats/${id}/pin`, { pin }),
   verifyPin:         (id, pin)    => api.post(`/chats/${id}/verify-pin`, { pin }),
   recoverPin:        (id, d)      => api.post(`/chats/${id}/pin/recover`, d),
   removePin:         id           => api.delete(`/chats/${id}/pin`),
-  // Чатты бекіту (pin chat)
   pinChat:           id           => api.post(`/chats/${id}/pin-chat`),
   unpinChat:         id           => api.delete(`/chats/${id}/pin-chat`),
   markRead:          (id, d)      => api.post(`/chats/${id}/read`, d),
