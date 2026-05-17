@@ -97,7 +97,7 @@ export function RegisterForm() {
     if (!username) { setError('Никнейм енгізіңіз'); return }
     if (username.length < 3) { setError('Никнейм кемінде 3 символ болуы керек'); return }
     if (username.length > 30) { setError('Никнейм 30 символдан аспауы керек'); return }
-    if (!/^[a-z0-9_.−]+$/.test(username)) {
+    if (!/^[a-z0-9_.\-]+$/.test(username)) {
       setError('Никнейм тек латын әріптерін (a-z), сандарды, _ және . қамтуы мүмкін')
       return
     }
