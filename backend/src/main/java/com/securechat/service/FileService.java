@@ -20,6 +20,9 @@ public class FileService {
     @Value("${app.upload.dir:uploads/}")
     private String uploadDir;
 
+    @Value("${app.base-url:http://localhost:8080}")
+    private String baseUrl;
+
     private static final long MAX_IMAGE_SIZE = 10 * 1024 * 1024; // 10MB
     private static final long MAX_AUDIO_SIZE = 25 * 1024 * 1024; // 25MB
     private static final long MAX_FILE_SIZE  = 50 * 1024 * 1024; // 50MB
@@ -61,7 +64,7 @@ public class FileService {
         Path filePath = uploadPath.resolve(filename);
         Files.copy(file.getInputStream(), filePath, StandardCopyOption.REPLACE_EXISTING);
 
-        return String.format("/uploads/%d/%s/%s", chatId, folderType, filename);
+        return String.format("%s/uploads/%d/%s/%s", baseUrl, chatId, folderType, filename);
     }
 
     // ===== СУРЕТ ВАЛИДАЦИЯСЫ =====
