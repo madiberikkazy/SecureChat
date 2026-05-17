@@ -21,4 +21,7 @@ public interface MessageRepository extends JpaRepository<Message, Long> {
     long countUnread(@Param("chatId") Long chatId,
                      @Param("userId") Long userId,
                      @Param("since") LocalDateTime since);
+
+    // Бекітілген хабарламалар (pinned messages)
+    List<Message> findByChatIdAndPinnedTrueOrderByPinnedAtDesc(Long chatId);
 }

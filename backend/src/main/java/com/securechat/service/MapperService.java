@@ -64,6 +64,9 @@ public class MapperService {
                 .editedAt(msg.getEditedAt())
                 .replyTo(msg.getReplyTo() != null ? toMessageDto(msg.getReplyTo()) : null)
                 .read(isRead)
+                .pinned(msg.isPinned())
+                .pinnedAt(msg.getPinnedAt())
+                .forwardedFrom(msg.getForwardedFrom() != null ? toMessageDto(msg.getForwardedFrom()) : null)
                 .build();
     }
 
@@ -73,6 +76,7 @@ public class MapperService {
                 .user(toUserDto(cm.getUser()))
                 .role(cm.getRole().name())
                 .joinedAt(cm.getJoinedAt())
+                .pinnedAt(cm.getPinnedAt())
                 .build();
     }
 

@@ -35,25 +35,33 @@ export const userAPI = {
 }
 
 export const chatAPI = {
-  getAll:           ()           => api.get('/chats'),
-  getOne:           id           => api.get(`/chats/${id}`),
-  create:           d            => api.post('/chats', d),
-  update:           (id, d)      => api.patch(`/chats/${id}`, d),
-  delete:           id           => api.delete(`/chats/${id}`),
-  getMessages:      id           => api.get(`/chats/${id}/messages`),
-  addMember:        (id, d)      => api.post(`/chats/${id}/members`, d),
-  removeMember:     (id, uid)    => api.delete(`/chats/${id}/members/${uid}`),
-  changeMemberRole: (id, uid, d) => api.patch(`/chats/${id}/members/${uid}/role`, d),
-  setPin:           (id, pin)    => api.post(`/chats/${id}/pin`, { pin }),
-  verifyPin:        (id, pin)    => api.post(`/chats/${id}/verify-pin`, { pin }),
-  recoverPin:       (id, d)      => api.post(`/chats/${id}/pin/recover`, d),
-  removePin:        id           => api.delete(`/chats/${id}/pin`),
-  markRead:         (id, d)      => api.post(`/chats/${id}/read`, d),
+  getAll:            ()           => api.get('/chats'),
+  getOne:            id           => api.get(`/chats/${id}`),
+  create:            d            => api.post('/chats', d),
+  update:            (id, d)      => api.patch(`/chats/${id}`, d),
+  delete:            id           => api.delete(`/chats/${id}`),
+  getMessages:       id           => api.get(`/chats/${id}/messages`),
+  getPinnedMessages: id           => api.get(`/chats/${id}/pinned-messages`),
+  addMember:         (id, d)      => api.post(`/chats/${id}/members`, d),
+  removeMember:      (id, uid)    => api.delete(`/chats/${id}/members/${uid}`),
+  changeMemberRole:  (id, uid, d) => api.patch(`/chats/${id}/members/${uid}/role`, d),
+  // Жасырын чат PIN
+  setPin:            (id, pin)    => api.post(`/chats/${id}/pin`, { pin }),
+  verifyPin:         (id, pin)    => api.post(`/chats/${id}/verify-pin`, { pin }),
+  recoverPin:        (id, d)      => api.post(`/chats/${id}/pin/recover`, d),
+  removePin:         id           => api.delete(`/chats/${id}/pin`),
+  // Чатты бекіту (pin chat)
+  pinChat:           id           => api.post(`/chats/${id}/pin-chat`),
+  unpinChat:         id           => api.delete(`/chats/${id}/pin-chat`),
+  markRead:          (id, d)      => api.post(`/chats/${id}/read`, d),
 }
 
 export const messageAPI = {
   send:      d        => api.post('/messages', d),
   edit:      (id, d)  => api.patch(`/messages/${id}`, d),
+  pin:       id       => api.post(`/messages/${id}/pin`),
+  unpin:     id       => api.delete(`/messages/${id}/pin`),
+  forward:   d        => api.post('/messages/forward', d),
   sendImage: form     => api.post('/messages/image', form, { headers: { 'Content-Type': 'multipart/form-data' } }),
   sendVoice: form     => api.post('/messages/voice', form, { headers: { 'Content-Type': 'multipart/form-data' } }),
   sendFile:  form     => api.post('/messages/file',  form, { headers: { 'Content-Type': 'multipart/form-data' } }),

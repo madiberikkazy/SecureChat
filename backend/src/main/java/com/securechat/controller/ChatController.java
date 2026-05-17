@@ -39,7 +39,7 @@ public class ChatController extends BaseController {
         return ResponseEntity.ok(chatService.createChat(req, currentUser(ud)));
     }
 
-    // DELETE /api/chats/{id} — чатты жою (тек Owner)
+    // DELETE /api/chats/{id} — чатты жою (Group: тек Owner, Private: кез-келген мүше)
     @DeleteMapping("/{id}")
     public ResponseEntity<Map<String, String>> deleteChat(@PathVariable Long id,
                                                           @AuthenticationPrincipal UserDetails ud) {
@@ -52,6 +52,13 @@ public class ChatController extends BaseController {
     public ResponseEntity<List<MessageDto>> getMessages(@PathVariable Long id,
                                                         @AuthenticationPrincipal UserDetails ud) {
         return ResponseEntity.ok(chatService.getMessages(id, currentUser(ud)));
+    }
+
+    // GET /api/chats/{id}/pinned-messages — бекітілген хабарламалар
+    @GetMapping("/{id}/pinned-messages")
+    public ResponseEntity<List<MessageDto>> getPinnedMessages(@PathVariable Long id,
+                                                              @AuthenticationPrincipal UserDetails ud) {
+        return ResponseEntity.ok(chatService.getPinnedMessages(id, currentUser(ud)));
     }
 
     // POST /api/chats/{id}/members — мүше қосу
@@ -88,7 +95,23 @@ public class ChatController extends BaseController {
         return ResponseEntity.ok(chatService.updateGroup(id, req, currentUser(ud)));
     }
 
-    // POST /api/chats/{id}/pin — PIN орнату
+    // POST /api/chats/{id}/pin-chat — чатты бекіту
+    @PostMapping("/{id}/pin-chat")
+    public ResponseEntity<Map<String, String>> pinChat(@PathVariable Long id,
+                                                       @AuthenticationPrincipal UserDetails ud) {
+        chatService.pinChat(id, currentUser(ud));
+        return ResponseEntity.ok(Map.of("message", "Чат бекітілді"));
+    }
+
+    // DELETE /api/chats/{id}/pin-chat — чат бекітуін алу
+    @DeleteMapping("/{id}/pin-chat")
+    public ResponseEntity<Map<String, String>> unpinChat(@PathVariable Long id,
+                                                         @AuthenticationPrincipal UserDetails ud) {
+        chatService.unpinChat(id, currentUser(ud));
+        return ResponseEntity.ok(Map.of("message", "Чат бекітуі алынды"));
+    }
+
+    // POST /api/chats/{id}/pin — PIN орнату (hidden chat)
     @PostMapping("/{id}/pin")
     public ResponseEntity<Map<String, String>> setPin(@PathVariable Long id,
                                                       @RequestBody PinRequest req,

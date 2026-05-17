@@ -77,13 +77,18 @@ public class FileService {
     }
 
     // ===== ДЫБЫС ВАЛИДАЦИЯСЫ — кең тексеру =====
+    // Browser кейде: audio/webm;codecs=opus, audio/webm, application/octet-stream жібереді
     private void validateAudio(MultipartFile file) {
         if (file.isEmpty()) throw new RuntimeException("Файл бос");
 
         String ct = file.getContentType();
-        // audio/webm;codecs=opus, audio/mpeg, audio/ogg, audio/wav т.б. — барлығы audio/ басталады
-        if (ct == null || !ct.startsWith("audio/"))
-            throw new RuntimeException("Тек аудио форматтары рұқсат");
+        // application/octet-stream — браузер кейде аудио blob-ты осылай жібереді
+        boolean isAudio = ct == null
+                || ct.startsWith("audio/")
+                || ct.equals("application/octet-stream")
+                || ct.equals("video/webm"); // Chrome кейде video/webm деп жібереді
+        if (!isAudio)
+            throw new RuntimeException("Тек аудио форматтары рұқсат (алынған: " + ct + ")");
 
         if (file.getSize() > MAX_AUDIO_SIZE)
             throw new RuntimeException("Дыбыс хабарламасы 25MB-дан аспауы керек");

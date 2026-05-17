@@ -2,6 +2,7 @@ package com.securechat.dto.request;
 
 import jakarta.validation.constraints.*;
 import lombok.*;
+import java.util.List;
 
 public class Requests {
 
@@ -48,7 +49,7 @@ public class Requests {
         @NotBlank private String type;
         private String name;
         private String description;
-        private java.util.List<Long> memberIds;
+        private List<Long> memberIds;
     }
 
     @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
@@ -103,5 +104,12 @@ public class Requests {
     @Getter @Setter @NoArgsConstructor @AllArgsConstructor
     public static class ChangeMemberRoleRequest {
         @NotBlank private String role;  // "ADMIN" немесе "MEMBER"
+    }
+
+    // Хабарламаларды жіберу (forward)
+    @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
+    public static class ForwardMessagesRequest {
+        @NotNull private Long targetChatId;
+        @NotEmpty private List<Long> messageIds;
     }
 }

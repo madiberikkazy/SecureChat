@@ -2,6 +2,8 @@ package com.securechat.service;
 
 import java.io.IOException;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
@@ -87,6 +89,78 @@ public class MessageService {
         MessageDto dto = mapper.toMessageDto(msg);
         broadcast(msg.getChat().getId(), "EDIT_MESSAGE", dto);
         return dto;
+    }
+
+    // ===== ХАБАРЛАМАНЫ БЕКІТУ =====
+    @Transactional
+    public MessageDto pinMessage(Long messageId, User user) {
+        Message msg = messageRepo.findById(messageId)
+                .orElseThrow(() -> new RuntimeException("Хабарлама табылмады"));
+
+        if (!memberRepo.existsByChatIdAndUserIdAndActiveTrue(msg.getChat().getId(), user.getId()))
+            throw new RuntimeException("Рұқсат жоқ");
+
+        msg.setPinned(true);
+        msg.setPinnedAt(LocalDateTime.now());
+        messageRepo.save(msg);
+
+        MessageDto dto = mapper.toMessageDto(msg, user.getId());
+        broadcast(msg.getChat().getId(), "PIN_MESSAGE", dto);
+        return dto;
+    }
+
+    // ===== ХАБАРЛАМАНЫҢ БЕКІТУІН АЛУ =====
+    @Transactional
+    public MessageDto unpinMessage(Long messageId, User user) {
+        Message msg = messageRepo.findById(messageId)
+                .orElseThrow(() -> new RuntimeException("Хабарлама табылмады"));
+
+        if (!memberRepo.existsByChatIdAndUserIdAndActiveTrue(msg.getChat().getId(), user.getId()))
+            throw new RuntimeException("Рұқсат жоқ");
+
+        msg.setPinned(false);
+        msg.setPinnedAt(null);
+        messageRepo.save(msg);
+
+        MessageDto dto = mapper.toMessageDto(msg, user.getId());
+        broadcast(msg.getChat().getId(), "UNPIN_MESSAGE", dto);
+        return dto;
+    }
+
+    // ===== ХАБАРЛАМАЛАРДЫ ЖІБЕРУ (FORWARD) =====
+    @Transactional
+    public List<MessageDto> forwardMessages(ForwardMessagesRequest req, User sender) {
+        Chat targetChat = chatRepo.findById(req.getTargetChatId())
+                .orElseThrow(() -> new RuntimeException("Чат табылмады"));
+
+        if (!memberRepo.existsByChatIdAndUserIdAndActiveTrue(targetChat.getId(), sender.getId()))
+            throw new RuntimeException("Сіз мақсатты чатта мүше емессіз");
+
+        List<MessageDto> results = new ArrayList<>();
+
+        for (Long msgId : req.getMessageIds()) {
+            Message original = messageRepo.findById(msgId).orElse(null);
+            if (original == null || original.isDeleted()) continue;
+
+            Message forwarded = Message.builder()
+                    .chat(targetChat)
+                    .sender(sender)
+                    .content(original.getContent())
+                    .type(original.getType())
+                    .fileUrl(original.getFileUrl())
+                    .forwardedFrom(original)
+                    .build();
+
+            messageRepo.save(forwarded);
+            targetChat.setLastMessageAt(LocalDateTime.now());
+
+            MessageDto dto = mapper.toMessageDto(forwarded, sender.getId());
+            broadcast(targetChat.getId(), "NEW_MESSAGE", dto);
+            results.add(dto);
+        }
+
+        chatRepo.save(targetChat);
+        return results;
     }
 
     // ===== СУРЕТ ХАБАРЛАМАСЫ ЖІБЕРУ =====

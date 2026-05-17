@@ -38,5 +38,8 @@ public class ChatMember {
     @Builder.Default
     private boolean active = true;
 
+    // Чат бекітілген уақыты (null = бекітілмеген)
+    private LocalDateTime pinnedAt;
+
     public enum Role { OWNER, ADMIN, MEMBER }
 }

@@ -99,3 +99,55 @@
   .sidebar { width: 100%; min-width: unset; }
   .sidebar.hidden-mobile { display: none; }
 }
+
+/* ── PINNED CHAT ── */
+.chat-item.pinned {
+  background: var(--bg-tertiary);
+}
+.chat-item.pinned:hover { background: var(--bg-hover); }
+.chat-item.pinned.selected { background: var(--accent-dim); }
+
+.pin-icon {
+  font-size: 11px;
+  margin-right: 3px;
+  vertical-align: middle;
+  opacity: 0.75;
+}
+
+/* ── RIGHT-CLICK CONTEXT MENU ── */
+.chat-context-menu {
+  position: fixed;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  box-shadow: var(--shadow-lg, 0 8px 24px rgba(0,0,0,0.3));
+  z-index: 300;
+  min-width: 180px;
+  overflow: hidden;
+  padding: 4px 0;
+}
+
+.context-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 16px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text-primary);
+  font-family: inherit;
+  text-align: left;
+  transition: background var(--t);
+}
+
+.context-menu-item:hover { background: var(--bg-hover); }
+.context-menu-item.danger { color: var(--danger, #e53935); }
+
+.context-menu-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 3px 0;
+}

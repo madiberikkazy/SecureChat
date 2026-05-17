@@ -1,6 +1,21 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 
+// Чаттарды сортировка: бекітілгендер жоғарыда, содан кейін соңғы хабарлама бойынша
+function sortChats(chats) {
+  return [...chats].sort((a, b) => {
+    // Бекітілген чаттар жоғарыда
+    if (a.pinnedAt && !b.pinnedAt) return -1
+    if (!a.pinnedAt && b.pinnedAt) return 1
+    // Екеуі де бекітілген болса — бекіту уақыты бойынша
+    if (a.pinnedAt && b.pinnedAt) return new Date(b.pinnedAt) - new Date(a.pinnedAt)
+    // Қалғандары — соңғы хабарлама уақыты бойынша
+    const ta = a.lastMessageAt || a.createdAt
+    const tb = b.lastMessageAt || b.createdAt
+    return new Date(tb) - new Date(ta)
+  })
+}
+
 const useChatStore = create(
   persist(
     (set, get) => ({
@@ -12,16 +27,18 @@ const useChatStore = create(
       unlockedChats: new Set(),
 
       // ===== ЧАТТАР =====
-      setChats: (chats) => set({ chats }),
+      setChats: (chats) => set({ chats: sortChats(chats) }),
 
       upsertChat: (chat) => set(state => {
         const idx = state.chats.findIndex(c => c.id === chat.id)
+        let updated
         if (idx >= 0) {
-          const updated = [...state.chats]
+          updated = [...state.chats]
           updated[idx] = chat
-          return { chats: updated }
+        } else {
+          updated = [chat, ...state.chats]
         }
-        return { chats: [chat, ...state.chats] }
+        return { chats: sortChats(updated) }
       }),
 
       // Чатты толығымен жою (delete немесе leave)
@@ -31,6 +48,20 @@ const useChatStore = create(
         messages: Object.fromEntries(
           Object.entries(state.messages).filter(([k]) => Number(k) !== chatId)
         ),
+      })),
+
+      // Чатты бекіту (pin)
+      pinChat: (chatId) => set(state => ({
+        chats: sortChats(state.chats.map(c =>
+          c.id === chatId ? { ...c, pinnedAt: new Date().toISOString() } : c
+        )),
+      })),
+
+      // Чат бекітуін алу (unpin)
+      unpinChat: (chatId) => set(state => ({
+        chats: sortChats(state.chats.map(c =>
+          c.id === chatId ? { ...c, pinnedAt: null } : c
+        )),
       })),
 
       selectChat: (id) => set({ selectedChatId: id }),
@@ -61,25 +92,28 @@ const useChatStore = create(
             ? { ...c, lastMessage: message, lastMessageAt: message.createdAt }
             : c
         )
-        updatedChats.sort((a, b) => {
-          const ta = a.lastMessageAt || a.createdAt
-          const tb = b.lastMessageAt || b.createdAt
-          return new Date(tb) - new Date(ta)
-        })
 
         return {
           messages: { ...state.messages, [chatId]: updated },
-          chats: updatedChats,
+          chats: sortChats(updatedChats),
         }
       }),
 
-      // Хабарламаны жаңарту (өңдеу / оқылды)
+      // Хабарламаны жаңарту (өңдеу / оқылды / pin)
       updateMessage: (chatId, message) => set(state => ({
         messages: {
           ...state.messages,
           [chatId]: (state.messages[chatId] || []).map(m =>
             m.id === message.id ? message : m
           ),
+        }
+      })),
+
+      // Хабарламаны өшіру store-дан (массивтен)
+      removeMessage: (chatId, messageId) => set(state => ({
+        messages: {
+          ...state.messages,
+          [chatId]: (state.messages[chatId] || []).filter(m => m.id !== messageId),
         }
       })),
 

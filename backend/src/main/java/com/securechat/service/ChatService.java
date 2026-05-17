@@ -73,6 +73,15 @@ public class ChatService {
                 .collect(Collectors.toList());
     }
 
+    // ===== БЕКІТІЛГЕН ХАБАРЛАМАЛАРДЫ АЛУ =====
+    public List<MessageDto> getPinnedMessages(Long chatId, User user) {
+        assertMember(chatId, user.getId());
+        return messageRepo.findByChatIdAndPinnedTrueOrderByPinnedAtDesc(chatId)
+                .stream()
+                .map(msg -> mapper.toMessageDto(msg, user.getId()))
+                .collect(Collectors.toList());
+    }
+
     // ===== ЖАС ЧАТ НЕМЕСЕ ТОП ҚҰРУ =====
     @Transactional
     public ChatDto createChat(CreateChatRequest req, User creator) {
@@ -174,7 +183,9 @@ public class ChatService {
         return buildChatDto(chat, requester);
     }
 
-    // ===== ЧАТТЫ ЖОЮ (тек Owner) =====
+    // ===== ЧАТТЫ ЖОЮ =====
+    // GROUP: тек Owner жоя алады (барлық мүшелер үшін)
+    // PRIVATE: кез-келген мүше өзінің жағынан шыға алады
     @Transactional
     public void deleteChat(Long chatId, User requester) {
         Chat chat = chatRepo.findById(chatId)
@@ -183,10 +194,35 @@ public class ChatService {
         ChatMember member = memberRepo.findByChatIdAndUserId(chatId, requester.getId())
                 .orElseThrow(() -> new RuntimeException("Рұқсат жоқ"));
 
-        if (member.getRole() != ChatMember.Role.OWNER)
-            throw new RuntimeException("Тек топ иесі жоя алады");
+        if (chat.getType() == Chat.ChatType.GROUP) {
+            // Топ — тек Owner жоя алады
+            if (member.getRole() != ChatMember.Role.OWNER)
+                throw new RuntimeException("Тек топ иесі жоя алады");
+            chatRepo.delete(chat);
+        } else {
+            // Жеке чат — пайдаланушы өз жағынан шығады (deactivate)
+            member.setActive(false);
+            member.setLeftAt(LocalDateTime.now());
+            memberRepo.save(member);
+        }
+    }
 
-        chatRepo.delete(chat);
+    // ===== ЧАТТЫ БЕКІТУ (PIN CHAT) =====
+    @Transactional
+    public void pinChat(Long chatId, User user) {
+        ChatMember member = memberRepo.findByChatIdAndUserId(chatId, user.getId())
+                .orElseThrow(() -> new RuntimeException("Сіз бұл чатта мүше емессіз"));
+        member.setPinnedAt(LocalDateTime.now());
+        memberRepo.save(member);
+    }
+
+    // ===== ЧАТТЫҢ БЕКІТУІН АЛУ (UNPIN CHAT) =====
+    @Transactional
+    public void unpinChat(Long chatId, User user) {
+        ChatMember member = memberRepo.findByChatIdAndUserId(chatId, user.getId())
+                .orElseThrow(() -> new RuntimeException("Сіз бұл чатта мүше емессіз"));
+        member.setPinnedAt(null);
+        memberRepo.save(member);
     }
 
     // ===== ЖАСЫРЫН ЧАТ PIN ОРНАТУ =====
@@ -319,6 +355,13 @@ public class ChatService {
 
         boolean hidden = hiddenRepo.existsByChatIdAndUserId(chat.getId(), currentUser.getId());
 
+        // Ағымдағы пайдаланушының чат бекіту уақытын алу
+        LocalDateTime pinnedAt = members.stream()
+                .filter(m -> m.getUser().getId().equals(currentUser.getId()))
+                .findFirst()
+                .map(ChatMember::getPinnedAt)
+                .orElse(null);
+
         return ChatDto.builder()
                 .id(chat.getId())
                 .type(chat.getType().name())
@@ -331,6 +374,7 @@ public class ChatService {
                 .lastMessage(lastMsg)
                 .unreadCount(unread)
                 .hidden(hidden)
+                .pinnedAt(pinnedAt)
                 .build();
     }
 
