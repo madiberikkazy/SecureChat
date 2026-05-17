@@ -14,7 +14,7 @@ class WebSocketService {
     if (this.client?.active) return
 
     this.client = new Client({
-      webSocketFactory: () => new SockJS((import.meta.env.VITE_WS_URL || '/ws')),
+      webSocketFactory: () => new SockJS((import.meta.env.VITE_WS_URL || 'https://securechat-production-b7f9.up.railway.app/ws')),
       connectHeaders: { Authorization: `Bearer ${token}` },
       reconnectDelay: 3000,
       heartbeatIncoming: 10000,
