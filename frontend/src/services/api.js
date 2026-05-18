@@ -35,6 +35,9 @@ export const userAPI = {
   uploadAvatar:   form => api.post('/users/me/avatar', form, { headers: { 'Content-Type': 'multipart/form-data' } }),
   deleteAvatar:   ()   => api.delete('/users/me/avatar'),
   changePassword: d    => api.post('/users/me/password', d),
+  blockUser:      id   => api.post(`/users/${id}/block`),
+  unblockUser:    id   => api.delete(`/users/${id}/block`),
+  blockStatus:    id   => api.get(`/users/${id}/block-status`),
 }
 
 export const chatAPI = {

@@ -2,6 +2,7 @@ package com.securechat.controller;
 
 import com.securechat.dto.request.Requests.*;
 import com.securechat.dto.response.Responses.*;
+import com.securechat.service.BlockService;
 import com.securechat.service.UserService;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -20,6 +21,9 @@ public class UserController extends BaseController {
 
     @Autowired
     private UserService userService;
+
+    @Autowired
+    private BlockService blockService;
 
     @GetMapping("/me")
     public ResponseEntity<UserDto> getMe(@AuthenticationPrincipal UserDetails ud) {
@@ -55,5 +59,28 @@ public class UserController extends BaseController {
     public ResponseEntity<Map<String, String>> changePassword(@Valid @RequestBody ChangePasswordRequest req, @AuthenticationPrincipal UserDetails ud) {
         userService.changePassword(currentUser(ud), req);
         return ResponseEntity.ok(Map.of("message", "Құпия сөз сәтті өзгертілді"));
+    }
+
+    // ===== БҰҒАТТАУ =====
+
+    @PostMapping("/{id}/block")
+    public ResponseEntity<Map<String, Object>> blockUser(
+            @PathVariable Long id,
+            @AuthenticationPrincipal UserDetails ud) {
+        return ResponseEntity.ok(blockService.blockUser(currentUser(ud), id));
+    }
+
+    @DeleteMapping("/{id}/block")
+    public ResponseEntity<Map<String, Object>> unblockUser(
+            @PathVariable Long id,
+            @AuthenticationPrincipal UserDetails ud) {
+        return ResponseEntity.ok(blockService.unblockUser(currentUser(ud), id));
+    }
+
+    @GetMapping("/{id}/block-status")
+    public ResponseEntity<Map<String, Boolean>> blockStatus(
+            @PathVariable Long id,
+            @AuthenticationPrincipal UserDetails ud) {
+        return ResponseEntity.ok(blockService.getBlockStatus(currentUser(ud), id));
     }
 }
