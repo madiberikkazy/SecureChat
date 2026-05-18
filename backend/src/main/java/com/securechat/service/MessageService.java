@@ -15,6 +15,7 @@ import com.securechat.dto.response.Responses.*;
 import com.securechat.entity.Chat;
 import com.securechat.entity.Message;
 import com.securechat.entity.User;
+import com.securechat.repository.BlockedUserRepository;
 import com.securechat.repository.ChatMemberRepository;
 import com.securechat.repository.ChatRepository;
 import com.securechat.repository.MessageRepository;
@@ -30,10 +31,27 @@ public class MessageService {
     private final ChatRepository chatRepo;
     private final ChatMemberRepository memberRepo;
     private final UserRepository userRepo;
+    private final BlockedUserRepository blockedUserRepo;
     private final SimpMessagingTemplate ws;
     private final MapperService mapper;
     private final FileService fileService;
     private final EncryptionService enc;
+
+    // ===== БҰҒАТТАУ ТЕКСЕРУ (жеке чаттар үшін) =====
+    private void checkNotBlocked(Chat chat, User sender) {
+        if (chat.getType() != Chat.ChatType.PRIVATE) return;
+        // Жеке чатта екінші мүшені табамыз
+        memberRepo.findByChatIdAndActiveTrue(chat.getId()).stream()
+                .filter(m -> !m.getUser().getId().equals(sender.getId()))
+                .findFirst()
+                .ifPresent(other -> {
+                    Long otherId = other.getUser().getId();
+                    if (blockedUserRepo.existsByBlockerIdAndBlockedId(otherId, sender.getId()))
+                        throw new RuntimeException("Сіз бұл пайдаланушы тарапынан бұғатталдыңыз");
+                    if (blockedUserRepo.existsByBlockerIdAndBlockedId(sender.getId(), otherId))
+                        throw new RuntimeException("Сіз бұл пайдаланушыны бұғаттадыңыз. Алдымен бұғаттауды алыңыз");
+                });
+    }
 
     // ===== МӘТІН ХАБАРЛАМАСЫ ЖІБЕРУ =====
     @Transactional
@@ -43,6 +61,8 @@ public class MessageService {
 
         if (!memberRepo.existsByChatIdAndUserIdAndActiveTrue(chat.getId(), sender.getId()))
             throw new RuntimeException("Сіз бұл чатта мүше емессіз");
+
+        checkNotBlocked(chat, sender);
 
         if (req.getContent() == null || req.getContent().isBlank())
             throw new RuntimeException("Хабарлама бос болмауы тиіс");
@@ -174,6 +194,8 @@ public class MessageService {
         if (!memberRepo.existsByChatIdAndUserIdAndActiveTrue(chat.getId(), sender.getId()))
             throw new RuntimeException("Сіз бұл чатта мүше емессіз");
 
+        checkNotBlocked(chat, sender);
+
         String fileUrl = fileService.uploadImage(imageFile, chatId, sender.getId());
         Message replyTo = replyToId != null ? messageRepo.findById(replyToId).orElse(null) : null;
 
@@ -205,6 +227,8 @@ public class MessageService {
         if (!memberRepo.existsByChatIdAndUserIdAndActiveTrue(chat.getId(), sender.getId()))
             throw new RuntimeException("Сіз бұл чатта мүше емессіз");
 
+        checkNotBlocked(chat, sender);
+
         String fileUrl = fileService.uploadVoiceMessage(voiceFile, chatId, sender.getId());
         Message replyTo = replyToId != null ? messageRepo.findById(replyToId).orElse(null) : null;
 
@@ -234,6 +258,8 @@ public class MessageService {
 
         if (!memberRepo.existsByChatIdAndUserIdAndActiveTrue(chat.getId(), sender.getId()))
             throw new RuntimeException("Сіз бұл чатта мүше емессіз");
+
+        checkNotBlocked(chat, sender);
 
         String fileUrl = fileService.uploadFile(file, chatId, sender.getId());
         Message replyTo = replyToId != null ? messageRepo.findById(replyToId).orElse(null) : null;

@@ -1177,5 +1177,46 @@
   margin: 0 20px;
 }
 
+/* ── BLOCKED BAR ── */
+.chat-blocked-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 14px 16px;
+  background: var(--bg-secondary);
+  border-top: 1px solid var(--border);
+  color: var(--text-secondary);
+  font-size: 13px;
+  flex-shrink: 0;
+  text-align: center;
+}
+
+.unblock-inline-btn {
+  padding: 5px 14px;
+  border-radius: 20px;
+  border: 1.5px solid var(--accent);
+  background: none;
+  color: var(--accent);
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all var(--t);
+}
+.unblock-inline-btn:hover {
+  background: var(--accent);
+  color: #fff;
+}
+
+/* Block button in actions */
+.uip-action-btn.blocked {
+  border-color: var(--danger, #e53935);
+  background: rgba(229, 57, 53, 0.08);
+}
+.uip-action-btn.blocked .uip-action-label {
+  color: var(--danger, #e53935);
+}
+
 /* Header clickable hover */
 .chat-header-info.clickable:hover { background: var(--bg-hover); border-radius: var(--r-sm); }

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { chatAPI, messageAPI } from '../../services/api'
+import { chatAPI, messageAPI, userAPI } from '../../services/api'
 import { wsService } from '../../services/websocket'
 import useChatStore from '../../store/chatStore'
 import { useAuth } from '../../context/AuthContext'
@@ -47,6 +47,10 @@ export default function ChatWindow() {
   // ===== ЖІБЕРУ ДИАЛОГЫ (forward dialog) =====
   const [showForward,    setShowForward]    = useState(false)
 
+  // ===== БҰҒАТТАУ КҮЙІ =====
+  const [iBlockedThem,   setIBlockedThem]   = useState(false)
+  const [theyBlockedMe,  setTheyBlockedMe]  = useState(false)
+
   // ===== БЕКІТІЛГЕН ХАБАРЛАМАЛАР =====
   const [pinnedMessages, setPinnedMessages] = useState([])
   const [pinnedIndex,    setPinnedIndex]    = useState(0) // Which pinned msg to show in banner
@@ -77,7 +81,22 @@ export default function ChatWindow() {
     setPinnedMessages([])
     setPinnedIndex(0)
     setShowUserInfo(false)
+    setIBlockedThem(false)
+    setTheyBlockedMe(false)
   }, [selectedChatId])
+
+  // Бұғаттау күйін тексеру (тек жеке чаттар үшін)
+  useEffect(() => {
+    if (!selectedChatId || !chat || chat.type !== 'PRIVATE') return
+    const other = chat.members?.find(m => m.user?.id !== user?.id)?.user
+    if (!other) return
+    userAPI.blockStatus(other.id)
+      .then(res => {
+        setIBlockedThem(res.data.iBlockedThem)
+        setTheyBlockedMe(res.data.theyBlockedMe)
+      })
+      .catch(() => {})
+  }, [selectedChatId, chat?.type])
 
   // ===== ХАБАРЛАМАЛАРДЫ ЖҮКТЕУ =====
   useEffect(() => {
@@ -449,6 +468,7 @@ export default function ChatWindow() {
       {/* ── USER INFO PAGE (header басқанда) ── */}
       {showUserInfo && (
         <UserInfoPage
+          onBlockChange={(blocked) => setIBlockedThem(blocked)}
           chat={chat}
           otherUser={otherUser}
           currentUser={user}
@@ -608,34 +628,53 @@ export default function ChatWindow() {
 
       {/* ── INPUT ── */}
       {!selectionMode && (
-        <div className="chat-input-bar">
-          <textarea
-            ref={inputRef}
-            className="chat-textarea"
-            placeholder={t('typeMessage')}
-            value={input}
-            onChange={handleInputChange}
-            onKeyDown={handleKey}
-            rows={1}
-            disabled={uploadingMedia}
-            onInput={e => {
-              e.target.style.height = 'auto'
-              e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px'
-            }}
-          />
-          <button
-            className="send-btn"
-            onClick={editingMsg ? handleEditSubmit : handleSend}
-            disabled={!input.trim() || sending || uploadingMedia}
-          >
-            {sending || uploadingMedia
-              ? <span className="spinner" style={{ width: 18, height: 18 }} />
-              : editingMsg
-                ? <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
-                : <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
-            }
-          </button>
-        </div>
+        theyBlockedMe ? (
+          <div className="chat-blocked-bar">
+            🚫 Сіз бұл пайдаланушы тарапынан бұғатталдыңыз
+          </div>
+        ) : iBlockedThem ? (
+          <div className="chat-blocked-bar">
+            🔕 Сіз бұл пайдаланушыны бұғаттадыңыз
+            <button className="unblock-inline-btn" onClick={async () => {
+              const other = chat.members?.find(m => m.user?.id !== user?.id)?.user
+              if (!other) return
+              try {
+                await userAPI.unblockUser(other.id)
+                setIBlockedThem(false)
+                toast.success('Бұғаттау алынды')
+              } catch { toast.error('Қате болды') }
+            }}>Бұғаттауды алу</button>
+          </div>
+        ) : (
+          <div className="chat-input-bar">
+            <textarea
+              ref={inputRef}
+              className="chat-textarea"
+              placeholder={t('typeMessage')}
+              value={input}
+              onChange={handleInputChange}
+              onKeyDown={handleKey}
+              rows={1}
+              disabled={uploadingMedia}
+              onInput={e => {
+                e.target.style.height = 'auto'
+                e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px'
+              }}
+            />
+            <button
+              className="send-btn"
+              onClick={editingMsg ? handleEditSubmit : handleSend}
+              disabled={!input.trim() || sending || uploadingMedia}
+            >
+              {sending || uploadingMedia
+                ? <span className="spinner" style={{ width: 18, height: 18 }} />
+                : editingMsg
+                  ? <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
+                  : <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+              }
+            </button>
+          </div>
+        )
       )}
 
       {/* ── PIN MODAL ── */}
@@ -894,15 +933,51 @@ function ChatInfoPanel({ chat, currentUser, onClose, onChatDeleted, onChatUpdate
 // ══════════════════════════════════════════
 //   USER INFO PAGE  (header басқанда ашылады)
 // ══════════════════════════════════════════
-function UserInfoPage({ chat, otherUser, currentUser, onClose, onChatDeleted, onClearChat, onPinSet }) {
+function UserInfoPage({ chat, otherUser, currentUser, onClose, onChatDeleted, onClearChat, onPinSet, onBlockChange }) {
   const toast = useToast()
+
+  const isGroup   = chat?.type === 'GROUP'
+
   const [muted, setMuted] = useState(
     () => localStorage.getItem(`muted_${chat?.id}`) === 'true'
   )
-  const [clearing, setClearing] = useState(false)
-  const [deleting, setDeleting] = useState(false)
+  const [clearing,    setClearing]    = useState(false)
+  const [deleting,    setDeleting]    = useState(false)
+  const [iBlocked,    setIBlocked]    = useState(false)
+  const [blockLoading, setBlockLoading] = useState(false)
 
-  const isGroup   = chat?.type === 'GROUP'
+  // Бұғаттау күйін жүктеу
+  useEffect(() => {
+    if (!otherUser?.id || isGroup) return
+    userAPI.blockStatus(otherUser.id)
+      .then(res => setIBlocked(res.data.iBlockedThem))
+      .catch(() => {})
+  }, [otherUser?.id])
+
+  const handleBlock = async () => {
+    if (blockLoading) return
+    setBlockLoading(true)
+    try {
+      if (iBlocked) {
+        await userAPI.unblockUser(otherUser.id)
+        setIBlocked(false)
+        onBlockChange?.(false)
+        toast.success('Бұғаттау алынды')
+      } else {
+        if (!window.confirm(`${otherUser?.name || otherUser?.username} пайдаланушысын бұғаттайсыз ба?`)) {
+          setBlockLoading(false)
+          return
+        }
+        await userAPI.blockUser(otherUser.id)
+        setIBlocked(true)
+        onBlockChange?.(true)
+        toast.success('Пайдаланушы бұғатталды')
+      }
+    } catch (err) {
+      toast.error(err?.response?.data?.error || 'Қате болды')
+    } finally { setBlockLoading(false) }
+  }
+
   const target    = isGroup ? null : otherUser
   const avatarUrl = isGroup ? chat?.avatarUrl : target?.avatarUrl
   const name      = isGroup ? (chat?.name || 'Топ') : (target?.name || 'Пайдаланушы')
@@ -1032,6 +1107,18 @@ function UserInfoPage({ chat, otherUser, currentUser, onClose, onChatDeleted, on
           <button className="uip-action-btn" onClick={handleShareContact}>
             <span className="uip-action-icon">📤</span>
             <span className="uip-action-label">Контакт</span>
+          </button>
+        )}
+
+        {/* Бұғаттау / Бұғаттауды алу */}
+        {!isGroup && (
+          <button
+            className={`uip-action-btn ${iBlocked ? 'active blocked' : ''}`}
+            onClick={handleBlock}
+            disabled={blockLoading}
+          >
+            <span className="uip-action-icon">{iBlocked ? '🔓' : '🚫'}</span>
+            <span className="uip-action-label">{blockLoading ? '...' : iBlocked ? 'Бұғаттауды алу' : 'Бұғаттау'}</span>
           </button>
         )}
 
